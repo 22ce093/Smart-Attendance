@@ -54,4 +54,3 @@ autoload_nvmrc
 ```
 
 After that, a new terminal or a `cd` into the repo will auto-switch to Node 20.19.6.
-
