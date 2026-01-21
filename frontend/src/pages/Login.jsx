@@ -23,9 +23,33 @@ export default function Login() {
         body: JSON.stringify(form)
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.message || 'Login failed')
-      if (data.token) localStorage.setItem('token', data.token)
-      navigate('/')
+      if (!res.ok) {
+        throw new Error(data.message || 'Login failed')
+      }
+      if (data.token) {
+        localStorage.setItem('token', data.token)
+        localStorage.setItem('role', data.role)
+        localStorage.setItem('name', data.name)
+        if (data.college) localStorage.setItem('college', data.college)
+      }
+
+      // Role-based redirect
+      switch (data.role) {
+        case 'superadmin':
+          navigate('/superadmin/dashboard')
+          break
+        case 'college_admin':
+          navigate('/admin/dashboard')
+          break
+        case 'teacher':
+          navigate('/teacher/dashboard')
+          break
+        case 'student':
+          navigate('/student/dashboard')
+          break
+        default:
+          navigate('/')
+      }
     } catch (err) {
       setError(err.message)
     } finally {
@@ -34,25 +58,50 @@ export default function Login() {
   }
 
   return (
-    <div className="auth-container mobile-card">
-      <div className="mobile-top">
-        <h2>Login</h2>
-      </div>
+    <div className="auth-wrapper">
+      <div className="auth-card">
+        <div className="auth-header">
+          <div className="auth-logo">Welcome Back</div>
+          <div className="auth-subtitle">Login to your account</div>
+        </div>
 
-      <form className="auth-form" onSubmit={onSubmit}>
-        <label>Email Address</label>
-        <input name="email" type="email" value={form.email} onChange={onChange} placeholder="Email" required />
+        <form className="auth-form" onSubmit={onSubmit}>
+          <div className="form-group">
+            <label>Email Address</label>
+            <input
+              className="form-input"
+              name="email"
+              type="email"
+              value={form.email}
+              onChange={onChange}
+              placeholder="name@example.com"
+              required
+            />
+          </div>
 
-        <label>Password</label>
-        <input name="password" type="password" value={form.password} onChange={onChange} placeholder="Password" required />
+          <div className="form-group">
+            <label>Password</label>
+            <input
+              className="form-input"
+              name="password"
+              type="password"
+              value={form.password}
+              onChange={onChange}
+              placeholder="••••••••"
+              required
+            />
+          </div>
 
-        {error && <div className="auth-error">{error}</div>}
+          {error && <div className="error-msg">{error}</div>}
 
-        <button type="submit" className="primary" disabled={loading}>{loading ? 'Logging in...' : 'Login'}</button>
-      </form>
+          <button type="submit" className="btn-primary" disabled={loading}>
+            {loading ? 'Logging in...' : 'Login'}
+          </button>
+        </form>
 
-      <div className="auth-footer small">
-        <Link to="/register/student">Don't have an account? Register</Link>
+        <div className="auth-footer">
+          <Link to="/register/student">Don't have an account? Register</Link>
+        </div>
       </div>
     </div>
   )
