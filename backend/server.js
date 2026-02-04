@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 const bcrypt = require('bcryptjs');
 const connectDB = require('./config/db');
 const User = require('./models/User');
+const College = require('./models/College');
 
 dotenv.config();
 
@@ -48,6 +49,17 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', time: Date.now() }
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/teacher', require('./routes/teacherRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
+
+// Public endpoint: list approved & active colleges for registration dropdown
+app.get('/api/colleges-public', async (req, res) => {
+  try {
+    const colleges = await College.find({ status: 'APPROVED', isActive: true }).select('name _id').sort({ createdAt: -1 });
+    res.json(colleges);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, '127.0.0.1', () => console.log(`Server running on http://127.0.0.1:${PORT}`));

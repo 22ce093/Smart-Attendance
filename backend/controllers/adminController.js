@@ -207,11 +207,34 @@ const getAllUsers = async (req, res) => {
   }
 };
 
+// @desc    Toggle user status (Active/Blocked)
+// @route   POST /api/admin/toggle-status/:id
+// @access  Private (Super Admin)
+const toggleUserStatus = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Toggle between APPROVED and BLOCKED
+    // If PENDING, we probably shouldn't toggle to BLOCKED effectively rejecting, but let's just support Block/Unblock
+    user.status = user.status === 'BLOCKED' ? 'APPROVED' : 'BLOCKED';
+    await user.save();
+
+    res.json({ message: `User status changed to ${user.status}`, status: user.status });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   // Super Admin
   getPendingCollegeAdmins,
   approveCollegeAdmin,
   rejectCollegeAdmin,
+  toggleUserStatus,
   // College Admin
   getPendingTeachers,
   approveUser,

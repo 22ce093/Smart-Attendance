@@ -2,11 +2,11 @@ import { Outlet } from 'react-router-dom'
 import DashboardLayout from './DashboardLayout'
 import '../pages/dashboard.css'
 
-export default function AdminLayout() {
-    const userName = localStorage.getItem('name') || 'College Admin'; // Or fetch from context
+export default function SuperAdminLayout() {
+    const userName = localStorage.getItem('name') || 'Super Admin';
 
     return (
-        <DashboardLayout role="admin" userName={userName}>
+        <DashboardLayout role="superadmin" userName={userName}>
             <Outlet />
         </DashboardLayout>
     )

@@ -1,45 +1,7 @@
 import { useState, useEffect } from 'react'
+import { StatCard, RequestCard, SectionHeader } from '../../components/DashboardWidgets'
+import { Users, Clock, QrCode, BookOpen, BarChart3 } from 'lucide-react'
 import '../dashboard.css'
-
-const StatCard = ({ label, value, icon, color }) => (
-    <div className="stat-card">
-        <div className="stat-info">
-            <div className="stat-value">{value}</div>
-            <div className="stat-label">{label}</div>
-        </div>
-        <div className={`stat-icon ${color}`}>{icon}</div>
-    </div>
-)
-
-const RequestCard = ({ user, onApprove, onReject, loading }) => (
-    <div className="request-card">
-        <div className="request-info">
-            <div className="request-name">{user.name}</div>
-            <div className="request-email">{user.email}</div>
-            <div className="request-meta">
-                <span>🏫 {user.college}</span>
-                <span>📚 {user.department}</span>
-                <span>🆔 {user.teacherId}</span>
-            </div>
-        </div>
-        <div className="request-actions">
-            <button
-                className="btn-approve"
-                onClick={() => onApprove(user._id)}
-                disabled={loading}
-            >
-                ✓ Approve
-            </button>
-            <button
-                className="btn-reject"
-                onClick={() => onReject(user._id)}
-                disabled={loading}
-            >
-                ✗ Reject
-            </button>
-        </div>
-    </div>
-)
 
 export default function CollegeAdminDashboard() {
     const [pendingTeachers, setPendingTeachers] = useState([])
@@ -51,7 +13,6 @@ export default function CollegeAdminDashboard() {
     const token = localStorage.getItem('token')
 
     useEffect(() => {
-        // Get college from stored user info or decode token
         const storedCollege = localStorage.getItem('college')
         if (storedCollege) setUserCollege(storedCollege)
         fetchPendingTeachers()
@@ -107,41 +68,115 @@ export default function CollegeAdminDashboard() {
     return (
         <div>
             <div className="page-header">
-                <h1 className="page-title">College Admin Dashboard</h1>
+                <h1 className="page-title">Dashboard</h1>
                 <div className="page-subtitle">
-                    Managing teachers for {userCollege || 'your college'}
+                    Overview for {userCollege || 'Your College'}
                 </div>
             </div>
 
             <div className="stats-grid">
-                <StatCard label="Pending Teachers" value={pendingTeachers.length} icon="⏳" color="orange" />
-                <StatCard label="Your College" value={userCollege || '-'} icon="🏫" color="blue" />
+                <StatCard
+                    label="Today's Classes"
+                    value="2"
+                    icon={<BookOpen size={24} />}
+                    color="blue"
+                />
+                <StatCard
+                    label="Active QR Session"
+                    value="Active"
+                    icon={<QrCode size={24} />}
+                    color="green"
+                />
+                <StatCard
+                    label="Pending Approvals"
+                    value={pendingTeachers.length}
+                    icon={<Clock size={24} />}
+                    color="orange"
+                />
+                <StatCard
+                    label="Avg Attendance"
+                    value="86%"
+                    icon={<BarChart3 size={24} />}
+                    color="purple"
+                />
             </div>
 
-            <div className="section-header">
-                <h2>Pending Teacher Requests</h2>
-            </div>
+            <div className="dashboard-grid-2col" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
+                <div className="main-section">
+                    <SectionHeader title="Teacher Approvals" />
 
-            {loading && <div className="loading-msg">Loading...</div>}
-            {error && <div className="error-msg">{error}</div>}
+                    {loading && <div className="loading-msg">Loading requests...</div>}
+                    {error && <div className="error-msg">{error}</div>}
 
-            {!loading && pendingTeachers.length === 0 && (
-                <div className="empty-state">
-                    <div className="empty-icon">✅</div>
-                    <p>No pending teacher requests for your college</p>
+                    {!loading && pendingTeachers.length === 0 && (
+                        <div className="empty-state">
+                            <div className="empty-icon">✅</div>
+                            <p>No pending teacher requests</p>
+                        </div>
+                    )}
+
+                    <div className="requests-list">
+                        {pendingTeachers.map(teacher => (
+                            <RequestCard
+                                key={teacher._id}
+                                user={teacher}
+                                onApprove={handleApprove}
+                                onReject={handleReject}
+                                loading={actionLoading}
+                            />
+                        ))}
+                    </div>
                 </div>
-            )}
 
-            <div className="requests-list">
-                {pendingTeachers.map(teacher => (
-                    <RequestCard
-                        key={teacher._id}
-                        user={teacher}
-                        onApprove={handleApprove}
-                        onReject={handleReject}
-                        loading={actionLoading}
-                    />
-                ))}
+                <div className="side-section">
+                    <SectionHeader title="Today's Classes" />
+                    <div className="schedule-list">
+                        <div className="schedule-item">
+                            <div className="schedule-time">09:00 AM</div>
+                            <div className="schedule-details">
+                                <div className="schedule-subject">Data Structures</div>
+                                <div className="schedule-room">CS Dept • Room 301</div>
+                            </div>
+                        </div>
+                        <div className="schedule-item">
+                            <div className="schedule-time">01:30 PM</div>
+                            <div className="schedule-details">
+                                <div className="schedule-subject">Database Mgmt</div>
+                                <div className="schedule-room">CS Dept • Lab 2</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style={{ marginTop: '32px' }}>
+                        <SectionHeader title="Department Attendance" />
+                        <div className="stat-card" style={{ display: 'block' }}>
+                            {/* Placeholder for chart */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                <span>Computer Science</span>
+                                <span style={{ color: '#22c55e' }}>92%</span>
+                            </div>
+                            <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
+                                <div style={{ width: '92%', height: '100%', background: '#22c55e' }}></div>
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', marginTop: '16px' }}>
+                                <span>Mechanical</span>
+                                <span style={{ color: '#38bdf8' }}>78%</span>
+                            </div>
+                            <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
+                                <div style={{ width: '78%', height: '100%', background: '#38bdf8' }}></div>
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', marginTop: '16px' }}>
+                                <span>Civil</span>
+                                <span style={{ color: '#f97316' }}>64%</span>
+                            </div>
+                            <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
+                                <div style={{ width: '64%', height: '100%', background: '#f97316' }}></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     )

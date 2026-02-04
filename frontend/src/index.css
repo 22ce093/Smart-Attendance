@@ -28,6 +28,10 @@
   --font-family: 'Inter', system-ui, -apple-system, sans-serif;
 
   --bg-gradient: radial-gradient(circle at top left, #1e1b4b, #0f172a);
+
+  /* Overlay helpers for glass/highlight elements */
+  --glass-overlay: rgba(255, 255, 255, 0.05);
+  --glass-overlay-soft: rgba(255, 255, 255, 0.02);
 }
 
 /* Light Theme Overrides */
@@ -60,6 +64,8 @@
   --input-placeholder: #94a3b8;
 
   --bg-gradient: linear-gradient(135deg, #f0f9ff 0%, #e0e7ff 100%);
+  --glass-overlay: rgba(0, 0, 0, 0.04);
+  --glass-overlay-soft: rgba(0, 0, 0, 0.03);
 }
 
 body {

@@ -9,6 +9,7 @@ const UserSchema = new mongoose.Schema({
   enrollmentId: { type: String, unique: true, sparse: true }, // For students: 22CE093
   teacherId: { type: String, unique: true, sparse: true }, // For teachers: CE001
   college: { type: String },
+  collegeId: { type: mongoose.Schema.Types.ObjectId, ref: 'College' },
   status: {
     type: String,
     enum: ['PENDING', 'APPROVED', 'REJECTED', 'BLOCKED'],

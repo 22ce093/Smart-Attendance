@@ -6,8 +6,16 @@ import Register from './pages/Register'
 import Login from './pages/Login'
 import TeacherPendingRequests from './pages/teacher/TeacherPendingRequests'
 import TeacherDashboard from './pages/teacher/TeacherDashboard'
+import StartAttendance from './pages/teacher/StartAttendance'
+import AttendanceHistory from './pages/teacher/AttendanceHistory'
+import MyStudents from './pages/teacher/MyStudents'
+import TeacherProfile from './pages/teacher/TeacherProfile'
 import StudentDashboard from './pages/student/StudentDashboard'
 import SuperAdminDashboard from './pages/admin/SuperAdminDashboard'
+import ManageColleges from './pages/admin/ManageColleges'
+import CollegeApprovals from './pages/admin/CollegeApprovals'
+import ManageUsers from './pages/admin/ManageUsers'
+import SuperAdminLayout from './components/SuperAdminLayout'
 
 const ThemeToggle = () => {
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark')
@@ -52,9 +60,10 @@ const ThemeToggle = () => {
 }
 
 import AdminLayout from './components/AdminLayout'
-import AdminDashboard from './pages/admin/AdminDashboard' // College Admin Dashboard
+import AdminDashboard from './pages/admin/CollegeAdminDashboard' // College Admin Dashboard (New)
 import AdminUsers from './pages/admin/AdminUsers'
 import AdminCourses from './pages/admin/AdminCourses'
+import ManageDepartments from './pages/admin/ManageDepartments'
 
 function App() {
   return (
@@ -68,18 +77,30 @@ function App() {
         {/* Teacher Routes */}
         <Route path="/teacher/pending" element={<TeacherPendingRequests />} />
         <Route path="/teacher/dashboard" element={<TeacherDashboard />} />
+        <Route path="/teacher/attendance/start" element={<StartAttendance />} />
+        <Route path="/teacher/attendance/history" element={<AttendanceHistory />} />
+        <Route path="/teacher/students" element={<MyStudents />} />
+        <Route path="/teacher/low-attendance" element={<MyStudents />} />
+        <Route path="/teacher/profile" element={<TeacherProfile />} />
 
         {/* Student Routes */}
         <Route path="/student/dashboard" element={<StudentDashboard />} />
 
         {/* Super Admin Routes */}
-        <Route path="/superadmin/dashboard" element={<SuperAdminDashboard />} />
+        <Route path="/superadmin" element={<SuperAdminLayout />}>
+          <Route path="dashboard" element={<SuperAdminDashboard />} />
+          <Route path="colleges" element={<ManageColleges />} />
+          <Route path="approvals" element={<CollegeApprovals />} />
+          <Route path="users" element={<ManageUsers />} />
+          <Route index element={<SuperAdminDashboard />} />
+        </Route>
 
         {/* College Admin Routes */}
         <Route path="/admin" element={<AdminLayout />}>
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="users" element={<AdminUsers />} />
           <Route path="courses" element={<AdminCourses />} />
+            <Route path="departments" element={<ManageDepartments />} />
           {/* Defaults/Redirects */}
           <Route index element={<AdminDashboard />} />
           <Route path="*" element={<AdminDashboard />} />

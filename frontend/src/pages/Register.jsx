@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import './auth.css'
 
@@ -33,6 +33,8 @@ export default function Register() {
   const [errors, setErrors] = useState({})
   const [serverError, setServerError] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [collegesList, setCollegesList] = useState([])
+  const [collegesLoading, setCollegesLoading] = useState(true)
 
   function onChange(e) {
     const { name, value } = e.target
@@ -42,6 +44,24 @@ export default function Register() {
       setErrors({ ...errors, [name]: null })
     }
   }
+
+  useEffect(() => {
+    let mounted = true
+    const fetchColleges = async () => {
+      try {
+        const res = await fetch('/api/colleges-public')
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.message || 'Failed to load colleges')
+        if (mounted) setCollegesList(data)
+      } catch (err) {
+        console.error('Failed to fetch colleges:', err.message)
+      } finally {
+        if (mounted) setCollegesLoading(false)
+      }
+    }
+    fetchColleges()
+    return () => { mounted = false }
+  }, [])
 
   function validateForm() {
     const newErrors = {}
@@ -197,10 +217,13 @@ export default function Register() {
               onChange={onChange}
               required
             >
-              <option value="">Select College</option>
-              <option value="ABC Engineering College">ABC Engineering College</option>
-              <option value="XYZ Institute of Technology">XYZ Institute of Technology</option>
-              <option value="Global University">Global University</option>
+              <option value="">{collegesLoading ? 'Loading colleges...' : 'Select College'}</option>
+              {!collegesLoading && collegesList.length === 0 && (
+                <option value="">No colleges available</option>
+              )}
+              {collegesList.map(c => (
+                <option key={c._id} value={c.name}>{c.name}</option>
+              ))}
             </select>
             {errors.college && <span className="field-error">{errors.college}</span>}
           </div>
