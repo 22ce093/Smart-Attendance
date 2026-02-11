@@ -37,49 +37,45 @@ export default function StartAttendance() {
                 <div className="page-subtitle">Create a QR session for students to scan</div>
             </div>
 
-            <div className="content-card" style={{ maxWidth: '600px', margin: '0 auto' }}>
+            <div className="content-card form-card">
                 {!sessionData ? (
-                    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    <form onSubmit={handleSubmit}>
                         <div className="form-group">
-                            <label style={{ display: 'block', marginBottom: '8px', color: 'var(--color-text-secondary)' }}>Course Name</label>
-                            <div className="input-with-icon" style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', borderRadius: '10px', padding: '12px' }}>
-                                <Book size={20} style={{ color: 'var(--color-text-secondary)', marginRight: '10px' }} />
+                            <label className="form-label">Course Name</label>
+                            <div className="input-group">
+                                <Book size={20} className="input-icon" />
                                 <input
                                     type="text"
+                                    className="form-input"
                                     placeholder="e.g. Data Structures"
                                     value={course}
                                     onChange={(e) => setCourse(e.target.value)}
                                     required
-                                    style={{ background: 'transparent', border: 'none', color: 'var(--color-text-primary)', width: '100%', outline: 'none' }}
                                 />
                             </div>
                         </div>
 
                         <div className="form-group">
-                            <label style={{ display: 'block', marginBottom: '8px', color: 'var(--color-text-secondary)' }}>Department/Class</label>
-                            <div className="input-with-icon" style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', borderRadius: '10px', padding: '12px' }}>
+                            <label className="form-label">Department/Class</label>
+                            <div className="input-group">
                                 <UsersIcon />
                                 <input
                                     type="text"
+                                    className="form-input"
                                     placeholder="e.g. CE-SEM-4"
                                     value={department}
                                     onChange={(e) => setDepartment(e.target.value)}
                                     required
-                                    style={{ background: 'transparent', border: 'none', color: 'var(--color-text-primary)', width: '100%', outline: 'none' }}
                                 />
                             </div>
                         </div>
 
-                        {error && <div style={{ color: '#ef4444', fontSize: '0.9rem' }}>{error}</div>}
+                        {error && <div style={{ color: '#ef4444', fontSize: '0.9rem', marginBottom: '16px' }}>{error}</div>}
 
                         <button
                             type="submit"
+                            className="btn-primary"
                             disabled={loading}
-                            style={{
-                                background: 'linear-gradient(135deg, var(--color-accent-grad-start), var(--color-accent-grad-end))',
-                                color: 'white', border: 'none', padding: '14px', borderRadius: '12px',
-                                fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
-                            }}
                         >
                             {loading ? 'Creating...' : (
                                 <>

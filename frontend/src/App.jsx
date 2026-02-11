@@ -11,9 +11,11 @@ import AttendanceHistory from './pages/teacher/AttendanceHistory'
 import MyStudents from './pages/teacher/MyStudents'
 import TeacherProfile from './pages/teacher/TeacherProfile'
 import StudentDashboard from './pages/student/StudentDashboard'
+import StudentScan from './pages/student/StudentScan'
 import SuperAdminDashboard from './pages/admin/SuperAdminDashboard'
 import ManageColleges from './pages/admin/ManageColleges'
 import CollegeApprovals from './pages/admin/CollegeApprovals'
+import AdminApprovals from './pages/admin/AdminApprovals'
 import ManageUsers from './pages/admin/ManageUsers'
 import SuperAdminLayout from './components/SuperAdminLayout'
 
@@ -85,6 +87,7 @@ function App() {
 
         {/* Student Routes */}
         <Route path="/student/dashboard" element={<StudentDashboard />} />
+        <Route path="/student/scan" element={<StudentScan />} />
 
         {/* Super Admin Routes */}
         <Route path="/superadmin" element={<SuperAdminLayout />}>
@@ -98,9 +101,10 @@ function App() {
         {/* College Admin Routes */}
         <Route path="/admin" element={<AdminLayout />}>
           <Route path="dashboard" element={<AdminDashboard />} />
+          <Route path="approvals" element={<AdminApprovals />} />
           <Route path="users" element={<AdminUsers />} />
           <Route path="courses" element={<AdminCourses />} />
-            <Route path="departments" element={<ManageDepartments />} />
+          <Route path="departments" element={<ManageDepartments />} />
           {/* Defaults/Redirects */}
           <Route index element={<AdminDashboard />} />
           <Route path="*" element={<AdminDashboard />} />

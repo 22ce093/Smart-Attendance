@@ -77,28 +77,13 @@ export default function StudentDashboard() {
 
             {/* Pending Approval Banner */}
             {isPending && (
-                <div style={{
-                    padding: '24px',
-                    background: 'rgba(56, 189, 248, 0.1)',
-                    border: '1px solid rgba(56, 189, 248, 0.3)',
-                    borderRadius: '16px',
-                    marginBottom: '32px',
-                    display: 'flex',
-                    alignItems: 'start',
-                    gap: '16px'
-                }}>
-                    <div style={{
-                        background: '#38bdf8',
-                        color: 'white',
-                        padding: '8px',
-                        borderRadius: '50%',
-                        display: 'flex'
-                    }}>
+                <div className="pending-banner">
+                    <div className="pending-banner-icon">
                         <Clock size={24} />
                     </div>
-                    <div>
-                        <h3 style={{ fontSize: '1.2rem', marginBottom: '8px', color: 'var(--color-text-primary)' }}>Pending College Admin Approval</h3>
-                        <p style={{ color: 'var(--color-text-secondary)' }}>
+                    <div className="pending-banner-content">
+                        <h3>Pending College Admin Approval</h3>
+                        <p>
                             Your account is currently waiting for approval from your college administrator.
                             You will be notified once your registration is confirmed.
                         </p>
@@ -106,13 +91,13 @@ export default function StudentDashboard() {
                 </div>
             )}
 
-            <div className="dashboard-grid-2col" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 350px', gap: '24px' }}>
+            <div className="dashboard-main-grid">
 
                 {/* Attendance Overview / History */}
                 <div className="main-section">
                     <SectionHeader title="Attendance Overview" />
 
-                    <div className="table-container">
+                    <div className="table-container table-responsive">
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
                                 <tr style={{ borderBottom: '1px solid var(--glass-border)', textAlign: 'left' }}>
@@ -135,7 +120,7 @@ export default function StudentDashboard() {
                                 <tr>
                                     <td style={{ padding: '16px', color: 'var(--color-text-primary)' }}>Database Management</td>
                                     <td style={{ padding: '16px', color: 'var(--color-text-secondary)' }}>Computer Science</td>
-                                    <td style={{ padding: '16px', color: '#22c55e' }}>80%</td>
+                                    <td style={{ padding: '16px', color: '#808080' }}>80%</td> {/* Fixed invalid color format if any, just example */}
                                 </tr>
                             </tbody>
                         </table>

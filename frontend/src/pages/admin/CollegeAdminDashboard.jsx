@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import '../dashboard.css'; // Ensure we use standard dashboard styles
 import { SummaryGrid, DeptOverviewTable, RecentActivityFeed } from '../../components/DashboardComponents';
@@ -19,6 +20,8 @@ const CollegeAdminDashboard = () => {
     useEffect(() => {
         fetchDashboardData();
     }, []);
+
+    const navigate = useNavigate();
 
     const fetchDashboardData = async () => {
         try {
@@ -92,7 +95,7 @@ const CollegeAdminDashboard = () => {
                                     </div>
                                     <button className="btn-approve"
                                         style={{ background: '#ef4444', color: 'white', border: 'none' }}
-                                        onClick={() => window.location.href = '/admin/approvals'} // Basic nav for now
+                                        onClick={() => navigate('/admin/approvals')}
                                     >
                                         Review Now
                                     </button>
