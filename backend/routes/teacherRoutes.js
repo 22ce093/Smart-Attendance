@@ -3,9 +3,9 @@ const router = express.Router();
 const { getPendingStudents, approveStudent, rejectStudent } = require('../controllers/teacherController');
 const { protect } = require('../middleware/authMiddleware'); // Assuming we have protect middleware
 
-// Middleware to ensure user is teacher or admin
+// Middleware to ensure user is a teacher
 const teacherOnly = (req, res, next) => {
-  if (req.user && (req.user.role === 'teacher' || req.user.role === 'admin')) {
+  if (req.user && req.user.role === 'teacher') {
     next();
   } else {
     res.status(401).json({ message: 'Not authorized as a teacher' });
@@ -20,6 +20,7 @@ router.post('/reject/:id', protect, teacherOnly, rejectStudent);
 const { 
   getTeacherDashboardStats, 
   createAttendanceSession, 
+  endAttendanceSession,
   getAttendanceHistory, 
   getMyStudents, 
   getLowAttendanceStudents,
@@ -28,6 +29,7 @@ const {
 
 router.get('/dashboard-stats', protect, teacherOnly, getTeacherDashboardStats);
 router.post('/attendance/start', protect, teacherOnly, createAttendanceSession);
+router.post('/attendance/:id/end', protect, teacherOnly, endAttendanceSession);
 router.get('/attendance/history', protect, teacherOnly, getAttendanceHistory);
 router.get('/students', protect, teacherOnly, getMyStudents);
 router.get('/students/low-attendance', protect, teacherOnly, getLowAttendanceStudents);

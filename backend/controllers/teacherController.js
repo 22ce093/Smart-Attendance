@@ -1,24 +1,103 @@
+const QRCode = require('qrcode');
+const Attendance = require('../models/Attendance');
+const AttendanceSession = require('../models/AttendanceSession');
 const User = require('../models/User');
+const { resolveCollegeContext } = require('../utils/collegeContext');
+const {
+  equalDepartmentNames,
+  normalizeDepartmentName,
+  resolveDepartmentValue
+} = require('../utils/department');
+const {
+  createSessionToken,
+  generateSessionCode,
+  isValidLocation,
+  parseLocation
+} = require('./AttendanceController');
 
-// @desc    Get all pending students
-// @route   GET /api/teacher/pending
-// @access  Private (Teacher/Admin)
+const buildCollegeScope = (collegeId, collegeName) => ({
+  $or: [{ collegeId }, { college: collegeName }]
+});
+
+const escapeRegex = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const buildDepartmentCondition = (department) => ({
+  $regex: `^${escapeRegex(normalizeDepartmentName(department))}$`,
+  $options: 'i'
+});
+
+const buildScopedQuery = (baseQuery, collegeId, collegeName, department) => {
+  const scopedConditions = [buildCollegeScope(collegeId, collegeName)];
+
+  if (department) {
+    scopedConditions.push({ department: buildDepartmentCondition(department) });
+  }
+
+  return {
+    ...baseQuery,
+    $and: scopedConditions
+  };
+};
+
+const resolveTeacherDepartment = (teacher, college) => {
+  const teacherDepartment = normalizeDepartmentName(teacher?.department);
+  if (!teacherDepartment) {
+    return '';
+  }
+
+  if (!college?.departments?.length) {
+    return teacherDepartment;
+  }
+
+  return resolveDepartmentValue(teacherDepartment, college.departments);
+};
+
+const isStudentInTeacherScope = (student, collegeId, collegeName, teacherDepartment) => {
+  const sameCollege =
+    (student.collegeId && String(student.collegeId) === String(collegeId)) ||
+    student.college === collegeName;
+
+  if (!sameCollege) {
+    return false;
+  }
+
+  if (!teacherDepartment) {
+    return true;
+  }
+
+  return equalDepartmentNames(student.department, teacherDepartment);
+};
+
 const getPendingStudents = async (req, res) => {
   try {
-    const students = await User.find({ role: 'student', status: 'PENDING' })
-      .select('-password');
+    const { user: teacher, college, collegeId, collegeName } = await resolveCollegeContext(req.user.id);
+    const teacherDepartment = resolveTeacherDepartment(teacher, college);
+
+    const students = await User.find(
+      buildScopedQuery(
+        {
+          role: 'student',
+          status: 'PENDING'
+        },
+        collegeId,
+        collegeName,
+        teacherDepartment
+      )
+    )
+      .select('-password')
+      .sort({ createdAt: -1 });
+
     res.json(students);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 
-// @desc    Approve a student
-// @route   POST /api/teacher/approve/:id
-// @access  Private (Teacher/Admin)
 const approveStudent = async (req, res) => {
   try {
+    const { user: teacher, college, collegeId, collegeName } = await resolveCollegeContext(req.user.id);
+    const teacherDepartment = resolveTeacherDepartment(teacher, college);
     const student = await User.findById(req.params.id);
 
     if (!student) {
@@ -26,192 +105,434 @@ const approveStudent = async (req, res) => {
     }
 
     if (student.role !== 'student') {
-        return res.status(400).json({ message: 'User is not a student' });
+      return res.status(400).json({ message: 'User is not a student' });
+    }
+
+    if (!isStudentInTeacherScope(student, collegeId, collegeName, teacherDepartment)) {
+      return res.status(403).json({ message: 'You can only approve students from your department and college' });
     }
 
     student.status = 'APPROVED';
-    // Optionally assign the confirming teacher
     student.assignedTeacher = req.user.id;
-    
     await student.save();
 
     res.json({ message: 'Student approved successfully', student });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 
-// @desc    Reject a student
-// @route   POST /api/teacher/reject/:id
-// @access  Private (Teacher/Admin)
 const rejectStudent = async (req, res) => {
   try {
+    const { user: teacher, college, collegeId, collegeName } = await resolveCollegeContext(req.user.id);
+    const teacherDepartment = resolveTeacherDepartment(teacher, college);
     const student = await User.findById(req.params.id);
 
     if (!student) {
       return res.status(404).json({ message: 'Student not found' });
     }
 
+    if (student.role !== 'student') {
+      return res.status(400).json({ message: 'User is not a student' });
+    }
+
+    if (!isStudentInTeacherScope(student, collegeId, collegeName, teacherDepartment)) {
+      return res.status(403).json({ message: 'You can only reject students from your department and college' });
+    }
+
     student.status = 'REJECTED';
+    student.assignedTeacher = undefined;
     await student.save();
 
-    res.json({ message: 'Student rejected', student });
+    res.json({ message: 'Student rejected successfully', student });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 
-module.exports = {
-  getPendingStudents,
-  approveStudent,
-  approveStudent,
-  rejectStudent
-};
-
-// =============================================
-// DASHBOARD & ATTENDANCE
-// =============================================
-
-// @desc    Get Teacher Dashboard Stats
-// @route   GET /api/teacher/dashboard-stats
-// @access  Private (Teacher)
 const getTeacherDashboardStats = async (req, res) => {
   try {
     const teacherId = req.user.id;
-    const teacher = await User.findById(teacherId);
+    const { user: teacher, college, collegeId, collegeName } = await resolveCollegeContext(teacherId);
+    const teacherDepartment = resolveTeacherDepartment(teacher, college);
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
 
-    // 1. Pending Approvals
-    const pendingRequests = await User.countDocuments({ 
-      role: 'student', 
-      status: 'PENDING',
-      college: teacher.college // Assuming teacher sees all pending for their college or logic can be stricter
-    });
+    const studentScope = buildScopedQuery(
+      {
+        role: 'student'
+      },
+      collegeId,
+      collegeName,
+      teacherDepartment
+    );
 
-    // 2. Today's Classes (Mock for now, or count distinct sessions created today)
-    const today = new Date();
-    today.setHours(0,0,0,0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const sessionScope = buildScopedQuery(
+      {
+        teacher: teacherId
+      },
+      collegeId,
+      collegeName,
+      teacherDepartment
+    );
 
-    // const startOfToday = new Date(); startOfToday.setHours(0,0,0,0);
-    // const classSessionCount = await Attendance.distinct('course', { markedBy: teacherId, date: { $gte: startOfToday } }).length;
-    const classSessionCount = 2; // Mock value as sessions aren't fully modeled yet
+    const [pendingRequests, todaySessions, activeSessions, teacherSessions] = await Promise.all([
+      User.countDocuments({ ...studentScope, status: 'PENDING' }),
+      AttendanceSession.countDocuments({
+        ...sessionScope,
+        createdAt: { $gte: startOfDay }
+      }),
+      AttendanceSession.countDocuments({
+        ...sessionScope,
+        isActive: true,
+        expiresAt: { $gt: new Date() },
+        endedAt: { $exists: false }
+      }),
+      AttendanceSession.find(sessionScope).select('_id department collegeId college').lean()
+    ]);
 
-    // 3. Active Session (Mock)
-    const activeSession = "None"; 
+    const attendanceCounts = teacherSessions.length
+      ? await Attendance.aggregate([
+          { $match: { session: { $in: teacherSessions.map((session) => session._id) } } },
+          { $group: { _id: '$session', count: { $sum: 1 } } }
+        ])
+      : [];
 
-    // 4. Avg Attendance (Mock)
-    const avgAttendance = "85%";
+    const attendanceCountMap = new Map(
+      attendanceCounts.map((entry) => [String(entry._id), entry.count])
+    );
+    const studentTotalCache = new Map();
+
+    let totalPercentage = 0;
+    for (const session of teacherSessions) {
+      const sessionDepartment = normalizeDepartmentName(session.department);
+      const sessionCollegeId = session.collegeId || collegeId;
+      const sessionCollegeName = session.college || collegeName;
+      const cacheKey = `${String(sessionCollegeId || '')}:${sessionCollegeName}:${sessionDepartment}`;
+
+      if (!studentTotalCache.has(cacheKey)) {
+        const sessionStudentScope = buildScopedQuery(
+          {
+            role: 'student',
+            status: 'APPROVED'
+          },
+          sessionCollegeId,
+          sessionCollegeName,
+          sessionDepartment
+        );
+        const totalStudents = await User.countDocuments(sessionStudentScope);
+        studentTotalCache.set(cacheKey, totalStudents);
+      }
+
+      const sessionTotal = studentTotalCache.get(cacheKey);
+      const sessionPresent = attendanceCountMap.get(String(session._id)) || 0;
+      totalPercentage += sessionTotal > 0 ? (sessionPresent / sessionTotal) * 100 : 0;
+    }
+
+    const avgAttendance = teacherSessions.length
+      ? `${Math.round(totalPercentage / teacherSessions.length)}%`
+      : '0%';
 
     res.json({
-        pendingApprovals: pendingRequests,
-        todaysClasses: classSessionCount,
-        activeSession,
-        avgAttendance
+      pendingApprovals: pendingRequests,
+      todaysClasses: todaySessions,
+      activeSession: activeSessions > 0 ? `${activeSessions} active` : 'None',
+      avgAttendance
     });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message || 'Server error' });
+  }
+};
+
+const createAttendanceSession = async (req, res) => {
+  try {
+    const {
+      course,
+      department,
+      durationMinutes = 10,
+      allowedRadiusMeters = 120,
+      location: rawLocation
+    } = req.body;
+
+    const normalizedCourse = String(course || '').trim();
+    const requestedDepartment = normalizeDepartmentName(department);
+
+    if (!normalizedCourse) {
+      return res.status(400).json({ message: 'Course is required' });
+    }
+
+    const { user: teacher, college, collegeId, collegeName } = await resolveCollegeContext(req.user.id);
+    const teacherDepartment = resolveTeacherDepartment(teacher, college);
+
+    if (teacherDepartment && requestedDepartment && !equalDepartmentNames(teacherDepartment, requestedDepartment)) {
+      return res.status(403).json({ message: 'You can only start attendance for your own department' });
+    }
+
+    let sessionDepartment = requestedDepartment || teacherDepartment;
+
+    if (!sessionDepartment) {
+      return res.status(400).json({ message: 'Department is required' });
+    }
+
+    if (college.departments?.length) {
+      const departmentExists = college.departments.some((item) =>
+        equalDepartmentNames(item, sessionDepartment)
+      );
+      if (departmentExists) {
+        sessionDepartment = resolveDepartmentValue(sessionDepartment, college.departments);
+      } else if (!teacherDepartment || !equalDepartmentNames(sessionDepartment, teacherDepartment)) {
+        return res
+          .status(400)
+          .json({ message: 'Department must exist in your college before starting attendance' });
+      }
+    }
+
+    const location = parseLocation(rawLocation);
+    if (!isValidLocation(location)) {
+      return res.status(400).json({ message: 'Teacher geolocation is required to start attendance' });
+    }
+
+    const sessionDuration = Math.min(Math.max(Number(durationMinutes) || 10, 5), 60);
+    const radiusMeters = Math.min(Math.max(Number(allowedRadiusMeters) || 120, 25), 500);
+    const startsAt = new Date();
+    const expiresAt = new Date(startsAt.getTime() + sessionDuration * 60 * 1000);
+
+    const session = await AttendanceSession.create({
+      teacher: req.user.id,
+      collegeId,
+      college: collegeName,
+      department: sessionDepartment,
+      course: normalizedCourse,
+      sessionCode: generateSessionCode(),
+      location,
+      allowedRadiusMeters: radiusMeters,
+      durationMinutes: sessionDuration,
+      startsAt,
+      expiresAt
+    });
+
+    const sessionToken = createSessionToken(session);
+    const defaultOrigin = process.env.APP_ORIGIN || 'http://localhost:5173';
+    const origin = (req.headers.origin || defaultOrigin).replace(/\/$/, '');
+    const scanUrl = `${origin}/student/scan?token=${encodeURIComponent(sessionToken)}`;
+    const qrCodeDataUrl = await QRCode.toDataURL(scanUrl, {
+      margin: 1,
+      width: 320
+    });
+
+    res.status(201).json({
+      message: 'Session created successfully',
+      sessionId: session._id,
+      sessionCode: session.sessionCode,
+      course: session.course,
+      department: session.department,
+      startTime: session.startsAt,
+      expiresAt: session.expiresAt,
+      allowedRadiusMeters: session.allowedRadiusMeters,
+      durationMinutes: session.durationMinutes,
+      qrCodeDataUrl,
+      scanUrl,
+      sessionToken
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message || 'Server error' });
+  }
+};
+
+const endAttendanceSession = async (req, res) => {
+  try {
+    const session = await AttendanceSession.findOne({
+      _id: req.params.id,
+      teacher: req.user.id
+    });
+
+    if (!session) {
+      return res.status(404).json({ message: 'Attendance session not found' });
+    }
+
+    session.isActive = false;
+    session.endedAt = new Date();
+    await session.save();
+
+    res.json({ message: 'Attendance session ended successfully' });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
   }
 };
 
-// @desc    Start Attendance Session (Mock - creates a record)
-// @route   POST /api/teacher/attendance/start
-// @access  Private (Teacher)
-const createAttendanceSession = async (req, res) => {
-    try {
-        const { course, department } = req.body;
-        
-        // Use a temporary Attendance record to signify a session was held
-        // In a real QR system, we'd generate a session ID here to pass to frontend
-        const sessionToken = Math.random().toString(36).substring(7);
-
-        res.json({
-            message: 'Session created successfully',
-            sessionId: sessionToken,
-            course,
-            startTime: new Date()
-        });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Server error' });
-    }
-};
-
-// @desc    Get Attendance History
-// @route   GET /api/teacher/attendance/history
-// @access  Private (Teacher)
 const getAttendanceHistory = async (req, res) => {
-    // Mock history data
-    const history = [
-        { id: 1, date: '2023-10-24', course: 'Data Structures', present: 45, total: 50 },
-        { id: 2, date: '2023-10-23', course: 'DBMS', present: 40, total: 52 },
-        { id: 3, date: '2023-10-22', course: 'Data Structures', present: 48, total: 50 },
-    ];
+  try {
+    const { user: teacher, college, collegeId, collegeName } = await resolveCollegeContext(req.user.id);
+    const teacherDepartment = resolveTeacherDepartment(teacher, college);
+    const sessionScope = buildScopedQuery(
+      { teacher: req.user.id },
+      collegeId,
+      collegeName,
+      teacherDepartment
+    );
+
+    const sessions = await AttendanceSession.find(sessionScope)
+      .sort({ createdAt: -1 })
+      .limit(30)
+      .lean();
+
+    const attendanceCounts = sessions.length
+      ? await Attendance.aggregate([
+          { $match: { session: { $in: sessions.map((session) => session._id) } } },
+          { $group: { _id: '$session', present: { $sum: 1 } } }
+        ])
+      : [];
+
+    const presentMap = new Map(attendanceCounts.map((item) => [String(item._id), item.present]));
+    const studentCountCache = new Map();
+
+    const history = [];
+    for (const session of sessions) {
+      const sessionDepartment = normalizeDepartmentName(session.department);
+      const sessionCollegeId = session.collegeId || collegeId;
+      const sessionCollegeName = session.college || collegeName;
+      const cacheKey = `${String(sessionCollegeId || '')}:${sessionCollegeName}:${sessionDepartment}`;
+
+      if (!studentCountCache.has(cacheKey)) {
+        const totalStudents = await User.countDocuments(
+          buildScopedQuery(
+            {
+              role: 'student',
+              status: 'APPROVED'
+            },
+            sessionCollegeId,
+            sessionCollegeName,
+            sessionDepartment
+          )
+        );
+        studentCountCache.set(cacheKey, totalStudents);
+      }
+
+      const present = presentMap.get(String(session._id)) || 0;
+      const totalStudents = studentCountCache.get(cacheKey) || 0;
+
+      history.push({
+        id: session._id,
+        date: new Date(session.startsAt).toLocaleDateString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric'
+        }),
+        course: session.course,
+        department: session.department,
+        present,
+        total: totalStudents,
+        status: session.endedAt || session.expiresAt <= new Date() ? 'Completed' : 'Active'
+      });
+    }
+
     res.json(history);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message || 'Server error' });
+  }
 };
 
-// @desc    Get My Students
-// @route   GET /api/teacher/students
-// @access  Private (Teacher)
+const buildStudentAttendanceMap = async ({ teacherId, collegeId, collegeName, teacherDepartment }) => {
+  const studentScope = buildScopedQuery(
+    {
+      role: 'student',
+      status: 'APPROVED'
+    },
+    collegeId,
+    collegeName,
+    teacherDepartment
+  );
+
+  const students = await User.find(studentScope).select('-password');
+
+  const sessionScope = buildScopedQuery(
+    { teacher: teacherId },
+    collegeId,
+    collegeName,
+    teacherDepartment
+  );
+  const sessionIds = await AttendanceSession.find(sessionScope).distinct('_id');
+  const totalSessions = sessionIds.length;
+
+  const attendanceCounts = sessionIds.length
+    ? await Attendance.aggregate([
+        { $match: { session: { $in: sessionIds } } },
+        { $group: { _id: '$student', presentCount: { $sum: 1 } } }
+      ])
+    : [];
+
+  const attendanceMap = new Map(
+    attendanceCounts.map((entry) => [String(entry._id), entry.presentCount])
+  );
+
+  return students.map((student) => {
+    const presentCount = attendanceMap.get(String(student._id)) || 0;
+    const attendancePct = totalSessions > 0 ? Math.round((presentCount / totalSessions) * 100) : 0;
+
+    return {
+      ...student.toObject(),
+      attendancePct
+    };
+  });
+};
+
 const getMyStudents = async (req, res) => {
-    try {
-        const teacher = await User.findById(req.user.id);
-        const students = await User.find({
-            role: 'student',
-            status: 'APPROVED',
-            college: teacher.college,
-            department: teacher.department // Assuming filtering by same department
-        }).select('-password');
-        
-        res.json(students);
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Server error' });
-    }
+  try {
+    const { user: teacher, college, collegeId, collegeName } = await resolveCollegeContext(req.user.id);
+    const teacherDepartment = resolveTeacherDepartment(teacher, college);
+    const students = await buildStudentAttendanceMap({
+      teacherId: req.user.id,
+      collegeId,
+      collegeName,
+      teacherDepartment
+    });
+    res.json(students);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message || 'Server error' });
+  }
 };
 
-// @desc    Get Low Attendance Students
-// @route   GET /api/teacher/students/low-attendance
-// @access  Private (Teacher)
 const getLowAttendanceStudents = async (req, res) => {
-    try {
-        // In future: Aggregate real attendance data
-        // For now: Mock logic or return random subset of MyStudents
-        const teacher = await User.findById(req.user.id);
-        const students = await User.find({
-            role: 'student',
-            status: 'APPROVED',
-            college: teacher.college,
-            department: teacher.department
-        }).select('name email phone enrollmentId');
-
-        // Mock: arbitrarily pick first 3 as "low attendance"
-        const lowAttendanceList = students.slice(0, 3).map(s => ({
-            ...s._doc,
-            attendancePct: Math.floor(Math.random() * (74 - 50 + 1)) + 50 // Random 50-74%
-        }));
-
-        res.json(lowAttendanceList);
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Server error' });
-    }
+  try {
+    const { user: teacher, college, collegeId, collegeName } = await resolveCollegeContext(req.user.id);
+    const teacherDepartment = resolveTeacherDepartment(teacher, college);
+    const students = await buildStudentAttendanceMap({
+      teacherId: req.user.id,
+      collegeId,
+      collegeName,
+      teacherDepartment
+    });
+    res.json(students.filter((student) => student.attendancePct < 75));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message || 'Server error' });
+  }
 };
 
-// @desc    Get Teacher Profile
-// @route   GET /api/teacher/profile
-// @access  Private (Teacher)
 const getTeacherProfile = async (req, res) => {
-    try {
-        const user = await User.findById(req.user.id).select('-password');
-        res.json(user);
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Server error' });
+  try {
+    const { collegeName } = await resolveCollegeContext(req.user.id);
+    const user = await User.findById(req.user.id).select('-password').lean();
+    if (!user) {
+      return res.status(404).json({ message: 'Teacher not found' });
     }
+
+    if (!user.college) {
+      user.college = collegeName;
+    }
+
+    res.json(user);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message || 'Server error' });
+  }
 };
 
 module.exports = {
@@ -220,6 +541,7 @@ module.exports = {
   rejectStudent,
   getTeacherDashboardStats,
   createAttendanceSession,
+  endAttendanceSession,
   getAttendanceHistory,
   getMyStudents,
   getLowAttendanceStudents,

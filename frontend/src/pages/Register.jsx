@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import './auth.css'
 
@@ -9,7 +9,7 @@ const validatePhone = (phone) => /^\d{10}$/.test(phone);
 const validatePassword = (password) => {
   if (password.length < 8) return false;
   const hasDigit = /\d/.test(password);
-  const hasSymbol = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
+  const hasSymbol = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password);
   return hasDigit && hasSymbol;
 };
 const validateEnrollmentId = (id) => /^\d{2}[A-Z]{2}\d{3}$/.test(id);
@@ -36,9 +36,19 @@ export default function Register() {
   const [collegesList, setCollegesList] = useState([])
   const [collegesLoading, setCollegesLoading] = useState(true)
 
+  const selectedCollege = useMemo(
+    () => collegesList.find((collegeItem) => collegeItem.name === form.college),
+    [collegesList, form.college]
+  )
+  const availableDepartments = selectedCollege?.departments || []
+
   function onChange(e) {
     const { name, value } = e.target
-    setForm({ ...form, [name]: value })
+    const nextForm = { ...form, [name]: value }
+    if (name === 'college') {
+      nextForm.department = ''
+    }
+    setForm(nextForm)
     // Clear error on change
     if (errors[name]) {
       setErrors({ ...errors, [name]: null })
@@ -89,6 +99,8 @@ export default function Register() {
       }
       if (!form.department) {
         newErrors.department = 'Department is required'
+      } else if (availableDepartments.length > 0 && !availableDepartments.includes(form.department)) {
+        newErrors.department = 'Select a department from your college list'
       }
     }
 
@@ -98,6 +110,8 @@ export default function Register() {
       }
       if (!form.department) {
         newErrors.department = 'Department is required'
+      } else if (availableDepartments.length > 0 && !availableDepartments.includes(form.department)) {
+        newErrors.department = 'Select a department from your college list'
       }
     }
 
@@ -155,7 +169,7 @@ export default function Register() {
     <div className="auth-wrapper">
       <div className="auth-card">
         <button className="btn-back" onClick={() => navigate('/')}>
-          ← Back to Role
+          Back to Role
         </button>
 
         <div className="auth-header" style={{ marginTop: '10px' }}>
@@ -232,20 +246,32 @@ export default function Register() {
           {(role === 'teacher' || role === 'student') && (
             <div className="form-group">
               <label>Department</label>
-              <select
-                className={`form-input ${errors.department ? 'input-error' : ''}`}
-                name="department"
-                value={form.department}
-                onChange={onChange}
-                required
-              >
-                <option value="">Select Department</option>
-                <option value="Computer Science">Computer Science</option>
-                <option value="Information Technology">Information Technology</option>
-                <option value="Electronics">Electronics</option>
-                <option value="Mechanical">Mechanical</option>
-                <option value="Civil">Civil</option>
-              </select>
+              {availableDepartments.length > 0 ? (
+                <select
+                  className={`form-input ${errors.department ? 'input-error' : ''}`}
+                  name="department"
+                  value={form.department}
+                  onChange={onChange}
+                  required
+                >
+                  <option value="">Select Department</option>
+                  {availableDepartments.map((departmentItem) => (
+                    <option key={departmentItem} value={departmentItem}>
+                      {departmentItem}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  className={`form-input ${errors.department ? 'input-error' : ''}`}
+                  name="department"
+                  value={form.department}
+                  onChange={onChange}
+                  placeholder={form.college ? 'Enter your department' : 'Select college first'}
+                  disabled={!form.college}
+                  required
+                />
+              )}
               {errors.department && <span className="field-error">{errors.department}</span>}
             </div>
           )}
@@ -294,7 +320,7 @@ export default function Register() {
               type="password"
               value={form.password}
               onChange={onChange}
-              placeholder="••••••••"
+              placeholder="********"
               required
             />
             {errors.password && <span className="field-error">{errors.password}</span>}
@@ -311,7 +337,7 @@ export default function Register() {
               type="password"
               value={form.confirmPassword}
               onChange={onChange}
-              placeholder="••••••••"
+              placeholder="********"
               required
             />
             {errors.confirmPassword && <span className="field-error">{errors.confirmPassword}</span>}

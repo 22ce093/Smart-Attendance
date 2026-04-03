@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import DashboardLayout from '../../components/DashboardLayout';
-import { User, Mail, Phone, Building, Hash } from 'lucide-react';
-import axios from 'axios';
+import { Mail, Phone, Building, Hash } from 'lucide-react';
 
 export default function TeacherProfile() {
     const [profile, setProfile] = useState(null);
@@ -11,10 +10,14 @@ export default function TeacherProfile() {
         const fetchProfile = async () => {
             try {
                 const token = localStorage.getItem('token');
-                const res = await axios.get('http://localhost:5000/api/teacher/profile', {
+                const res = await fetch('/api/teacher/profile', {
                     headers: { Authorization: `Bearer ${token}` }
                 });
-                setProfile(res.data);
+                const data = await res.json();
+                if (!res.ok) {
+                    throw new Error(data.message || 'Failed to load profile');
+                }
+                setProfile(data);
             } catch (err) {
                 console.error(err);
             } finally {

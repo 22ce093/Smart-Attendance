@@ -1,167 +1,170 @@
-import { useState, useEffect } from 'react'
-import '../dashboard.css'
+import { useEffect, useMemo, useState } from 'react';
+
+const ROLE_FILTERS = ['student', 'teacher', 'college_admin'];
 
 export default function ManageUsers() {
-    const [users, setUsers] = useState([])
-    const [filteredUsers, setFilteredUsers] = useState([])
-    const [activeTab, setActiveTab] = useState('student')
-    const [loading, setLoading] = useState(false)
-    const [error, setError] = useState(null)
-    const [actionLoading, setActionLoading] = useState(null)
+  const [users, setUsers] = useState([]);
+  const [activeRole, setActiveRole] = useState('student');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [actionLoading, setActionLoading] = useState('');
 
-    useEffect(() => {
-        fetchUsers()
-    }, [])
+  const fetchUsers = async () => {
+    setLoading(true);
+    setError('');
 
-    useEffect(() => {
-        filterUsers()
-    }, [users, activeTab])
-
-    const fetchUsers = async () => {
-        setLoading(true)
-        try {
-            const token = localStorage.getItem('token')
-            const res = await fetch('/api/admin/all-users', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            })
-            const data = await res.json()
-            if (!res.ok) throw new Error(data.message || 'Failed to fetch users')
-            setUsers(data)
-        } catch (err) {
-            setError(err.message)
-        } finally {
-            setLoading(false)
-        }
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/admin/all-users', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to load users');
+      setUsers(data);
+    } catch (requestError) {
+      console.error(requestError);
+      setError(requestError.message || 'Failed to load users');
+    } finally {
+      setLoading(false);
     }
+  };
 
-    const filterUsers = () => {
-        const filtered = users.filter(user => user.role === activeTab)
-        setFilteredUsers(filtered)
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const filteredUsers = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    return users.filter((user) => {
+      if (user.role !== activeRole) {
+        return false;
+      }
+
+      if (!normalizedSearch) {
+        return true;
+      }
+
+      return [user.name, user.email, user.college, user.enrollmentId, user.teacherId]
+        .filter(Boolean)
+        .some((value) => value.toLowerCase().includes(normalizedSearch));
+    });
+  }, [users, activeRole, searchTerm]);
+
+  const handleToggleStatus = async (user) => {
+    setActionLoading(user._id);
+    setError('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/admin/toggle-status/${user._id}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to update status');
+
+      setUsers((current) =>
+        current.map((item) => (item._id === user._id ? { ...item, status: data.status } : item))
+      );
+    } catch (requestError) {
+      console.error(requestError);
+      setError(requestError.message || 'Failed to update status');
+    } finally {
+      setActionLoading('');
     }
+  };
 
-    const handleToggleStatus = async (user) => {
-        const newStatus = user.status === 'BLOCKED' ? 'Unblock' : 'Block'
-        if (!window.confirm(`Are you sure you want to ${newStatus} ${user.name}?`)) return
+  return (
+    <div className="admin-page-container">
+      <div className="page-header">
+        <h1 className="page-title">Manage Users</h1>
+        <div className="page-subtitle">Monitor platform-wide user access across all colleges.</div>
+      </div>
 
-        setActionLoading(user._id)
-        try {
-            const token = localStorage.getItem('token')
-            const res = await fetch(`/api/admin/toggle-status/${user._id}`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            })
-            const data = await res.json()
-            if (!res.ok) throw new Error(data.message)
+      <div className="content-card">
+        <div className="toolbar-row">
+          <div className="tab-group">
+            {ROLE_FILTERS.map((role) => (
+              <button
+                key={role}
+                className={activeRole === role ? 'btn-primary tab-btn' : 'btn-secondary tab-btn'}
+                style={{ marginTop: 0 }}
+                onClick={() => setActiveRole(role)}
+              >
+                {role.replace('_', ' ')}
+              </button>
+            ))}
+          </div>
 
-            // Update local state
-            setUsers(users.map(u =>
-                u._id === user._id ? { ...u, status: data.status } : u
-            ))
-
-            alert(`User ${newStatus}ed successfully`)
-        } catch (err) {
-            alert(err.message)
-        } finally {
-            setActionLoading(null)
-        }
-    }
-
-    return (
-        <div className="admin-page-container">
-            <div className="page-header">
-                <h1 className="page-title">Manage Users</h1>
-                <p className="page-subtitle">Control system access for all users</p>
-
-                <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-                    {['student', 'teacher', 'college_admin'].map(role => (
-                        <button
-                            key={role}
-                            onClick={() => setActiveTab(role)}
-                            className={activeTab === role ? 'btn-primary' : 'btn-secondary'}
-                            style={{
-                                textTransform: 'capitalize',
-                                background: activeTab === role ? 'var(--color-accent)' : 'rgba(255,255,255,0.1)',
-                                marginTop: 0
-                            }}
-                        >
-                            {role.replace('_', ' ')}s
-                        </button>
-                    ))}
-                </div>
-            </div>
-
-            <div className="content-card">
-                {loading ? (
-                    <div className="loading-spinner">Loading users...</div>
-                ) : (
-                    <div className="table-responsive">
-                        <table className="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Name</th>
-                                    <th>Email</th>
-                                    <th>College</th>
-                                    <th>Status</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {filteredUsers.length === 0 ? (
-                                    <tr>
-                                        <td colSpan="5" style={{ textAlign: 'center', padding: '40px' }}>
-                                            No {activeTab}s found
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    filteredUsers.map(user => (
-                                        <tr key={user._id}>
-                                            <td>
-                                                <div style={{ fontWeight: 600 }}>{user.name}</div>
-                                                <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
-                                                    {user.enrollmentId || user.teacherId || '-'}
-                                                </div>
-                                            </td>
-                                            <td>{user.email}</td>
-                                            <td>{user.college || 'N/A'}</td>
-                                            <td>
-                                                <span className={`status-badge ${user.status === 'APPROVED' ? 'active' : 'inactive'}`}
-                                                    style={{
-                                                        padding: '4px 10px',
-                                                        borderRadius: '12px',
-                                                        fontSize: '0.8rem',
-                                                        background: user.status === 'APPROVED' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                                                        color: user.status === 'APPROVED' ? '#22c55e' : '#ef4444'
-                                                    }}
-                                                >
-                                                    {user.status}
-                                                </span>
-                                            </td>
-                                            <td>
-                                                <button
-                                                    onClick={() => handleToggleStatus(user)}
-                                                    disabled={actionLoading === user._id}
-                                                    className="btn-secondary"
-                                                    style={{
-                                                        marginTop: 0,
-                                                        fontSize: '0.8rem',
-                                                        border: '1px solid ' + (user.status === 'BLOCKED' ? '#22c55e' : '#ef4444'),
-                                                        color: user.status === 'BLOCKED' ? '#22c55e' : '#ef4444'
-                                                    }}
-                                                >
-                                                    {user.status === 'BLOCKED' ? 'Activate' : 'Deactivate'}
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
+          <input
+            className="table-search"
+            placeholder="Search name, email, college or ID"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+          />
         </div>
-    )
+
+        {error ? <div className="error-msg">{error}</div> : null}
+        {loading ? <div className="loading-msg">Loading users...</div> : null}
+
+        {!loading ? (
+          <div className="table-responsive">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>College</th>
+                  <th>Department</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" style={{ textAlign: 'center', padding: '32px' }}>
+                      No users found for this filter
+                    </td>
+                  </tr>
+                ) : (
+                  filteredUsers.map((user) => (
+                    <tr key={user._id}>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{user.name}</div>
+                        <div className="muted-copy">{user.enrollmentId || user.teacherId || user.role}</div>
+                      </td>
+                      <td>{user.email}</td>
+                      <td>{user.college || 'N/A'}</td>
+                      <td>{user.department || 'N/A'}</td>
+                      <td>
+                        <span className={`status-pill ${user.status === 'APPROVED' ? 'success' : 'danger'}`}>
+                          {user.status}
+                        </span>
+                      </td>
+                      <td>
+                        <button
+                          className="btn-secondary action-btn"
+                          style={{ marginTop: 0 }}
+                          disabled={actionLoading === user._id}
+                          onClick={() => handleToggleStatus(user)}
+                        >
+                          {actionLoading === user._id
+                            ? 'Saving...'
+                            : user.status === 'BLOCKED'
+                              ? 'Activate'
+                              : 'Block'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
 }

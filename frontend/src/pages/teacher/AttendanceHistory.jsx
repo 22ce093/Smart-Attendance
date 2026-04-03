@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import DashboardLayout from '../../components/DashboardLayout';
 import { Calendar, Users } from 'lucide-react';
-import axios from 'axios';
 
 export default function AttendanceHistory() {
     const [history, setHistory] = useState([]);
@@ -11,10 +10,14 @@ export default function AttendanceHistory() {
         const fetchHistory = async () => {
             try {
                 const token = localStorage.getItem('token');
-                const res = await axios.get('http://localhost:5000/api/teacher/attendance/history', {
+                const res = await fetch('/api/teacher/attendance/history', {
                     headers: { Authorization: `Bearer ${token}` }
                 });
-                setHistory(res.data);
+                const data = await res.json();
+                if (!res.ok) {
+                    throw new Error(data.message || 'Failed to load history');
+                }
+                setHistory(data);
             } catch (err) {
                 console.error(err);
             } finally {
@@ -47,7 +50,10 @@ export default function AttendanceHistory() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {history.length > 0 ? history.map((session) => (
+                                {history.length > 0 ? history.map((session) => {
+                                    const attendanceRatio = session.total > 0 ? session.present / session.total : 0;
+
+                                    return (
                                     <tr key={session.id}>
                                         <td>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -63,19 +69,20 @@ export default function AttendanceHistory() {
                                             </div>
                                         </td>
                                         <td>
-                                            <span className={`badge ${session.present / session.total < 0.75 ? 'badge-red' : 'badge-green'}`}
+                                            <span className={`badge ${attendanceRatio < 0.75 ? 'badge-red' : 'badge-green'}`}
                                                 style={{
                                                     padding: '4px 12px',
                                                     borderRadius: '20px',
-                                                    background: session.present / session.total < 0.75 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)',
-                                                    color: session.present / session.total < 0.75 ? '#ef4444' : '#22c55e'
+                                                    background: attendanceRatio < 0.75 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)',
+                                                    color: attendanceRatio < 0.75 ? '#ef4444' : '#22c55e'
                                                 }}>
-                                                {Math.round((session.present / session.total) * 100)}%
+                                                {Math.round(attendanceRatio * 100)}%
                                             </span>
                                         </td>
-                                        <td>Completed</td>
+                                        <td>{session.status}</td>
                                     </tr>
-                                )) : (
+                                    );
+                                }) : (
                                     <tr><td colSpan="5" style={{ textAlign: 'center', padding: '30px' }}>No history found</td></tr>
                                 )}
                             </tbody>

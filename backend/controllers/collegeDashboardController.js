@@ -1,85 +1,48 @@
-const User = require('../models/User');
-const College = require('../models/College');
 const Attendance = require('../models/Attendance');
+const AttendanceSession = require('../models/AttendanceSession');
+const ClassModel = require('../models/Class');
+const User = require('../models/User');
+const { resolveCollegeContext } = require('../utils/collegeContext');
+const { normalizeDepartmentName, resolveDepartmentValue } = require('../utils/department');
 
-// @desc    Get dashboard KPIs (College Level)
-// @route   GET /api/admin/dashboard-stats
-// @access  Private (College Admin)
+const createCollegeScope = (collegeId, collegeName) => ({
+  $or: [{ collegeId }, { college: collegeName }]
+});
+
+const formatTimestamp = (value) =>
+  new Date(value).toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
 const getCollegeDashboardStats = async (req, res) => {
   try {
-    const adminId = req.user.id;
-    
-    // Find admin to get their college
-    const admin = await User.findById(adminId);
-    if (!admin || !admin.college) {
-      return res.status(400).json({ message: 'College Admin info not found' });
-    }
+    const { college, collegeId, collegeName } = await resolveCollegeContext(req.user.id);
+    const scope = createCollegeScope(collegeId, collegeName);
 
-    const collegeName = admin.college;
-    let collegeId = admin.collegeId;
+    const [totalTeachers, totalStudents, pendingTeachers, pendingStudents, todayAttendanceCount] =
+      await Promise.all([
+        User.countDocuments({ ...scope, role: 'teacher', status: 'APPROVED' }),
+        User.countDocuments({ ...scope, role: 'student', status: 'APPROVED' }),
+        User.countDocuments({ ...scope, role: 'teacher', status: 'PENDING' }),
+        User.countDocuments({ ...scope, role: 'student', status: 'PENDING' }),
+        Attendance.countDocuments({
+          collegeId,
+          date: {
+            $gte: new Date(new Date().setHours(0, 0, 0, 0)),
+            $lt: new Date(new Date().setHours(24, 0, 0, 0))
+          },
+          status: 'PRESENT'
+        })
+      ]);
 
-    // If collegeId missing, try to lookup by college name (legacy support)
-    let college = null;
-    if (collegeId) {
-      college = await College.findById(collegeId);
-    }
-    if (!college && collegeName) {
-      college = await College.findOne({ name: collegeName });
-      if (college) collegeId = college._id;
-    }
-
-    // 1. Total Departments - Fetch from College Model
-    const departmentsCount = college ? (college.departments || []).length : 0;
-
-    // 2. Total Teachers
-    const totalTeachers = await User.countDocuments({ 
-      college: collegeName, 
-      role: 'teacher',
-      status: 'APPROVED'
-    });
-
-    // 3. Total Students
-    const totalStudents = await User.countDocuments({ 
-      college: collegeName, 
-      role: 'student',
-      status: 'APPROVED'
-    });
-
-    // 4. Pending Approvals
-    // Teachers
-    const pendingTeachers = await User.countDocuments({
-      college: collegeName,
-      role: 'teacher',
-      status: 'PENDING'
-    });
-    // Students
-    const pendingStudents = await User.countDocuments({
-      college: collegeName,
-      role: 'student',
-      status: 'PENDING'
-    });
-
-    // 5. Today's Attendance % (Mock calculation until we have real data)
-    // In real scenario: (Present Students / Total Students) * 100
-    // Get start and end of today
-    const today = new Date();
-    today.setHours(0,0,0,0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    const todayAttendanceCount = await Attendance.countDocuments({
-      collegeId: collegeId, // Ideally utilize ID
-      date: { $gte: today, $lt: tomorrow },
-      status: 'PRESENT'
-    });
-
-    // Avoid division by zero
-    const attendancePercentage = totalStudents > 0 
-      ? Math.round((todayAttendanceCount / totalStudents) * 100) 
-      : 0;
+    const attendancePercentage = totalStudents > 0 ? Math.round((todayAttendanceCount / totalStudents) * 100) : 0;
 
     res.json({
-      totalDepartments: departmentsCount,
+      totalDepartments: (college.departments || []).length,
       totalTeachers,
       totalStudents,
       pendingApprovals: pendingTeachers + pendingStudents,
@@ -89,118 +52,206 @@ const getCollegeDashboardStats = async (req, res) => {
         students: pendingStudents
       }
     });
-
   } catch (error) {
     console.error('Dashboard Stats Error:', error);
-    res.status(500).json({ message: 'Server error fetching dashboard stats' });
+    res.status(500).json({ message: error.message || 'Server error fetching dashboard stats' });
   }
 };
 
-// @desc    Get Pending Approvals List
-// @route   GET /api/admin/approval-requests
-// @access  Private (College Admin)
 const getApprovalRequests = async (req, res) => {
   try {
-    const admin = await User.findById(req.user.id);
-    if (!admin || !admin.college) {
-      return res.status(400).json({ message: 'College info missing' });
-    }
-
+    const { collegeId, collegeName } = await resolveCollegeContext(req.user.id);
     const requests = await User.find({
-      college: admin.college,
+      ...createCollegeScope(collegeId, collegeName),
       status: 'PENDING',
       role: { $in: ['teacher', 'student'] }
     })
-    .select('-password')
-    .sort({ createdAt: -1 });
+      .select('-password')
+      .sort({ createdAt: -1 });
 
     res.json(requests);
-
   } catch (error) {
     console.error('Approval Requests Error:', error);
-    res.status(500).json({ message: 'Server error fetching requests' });
+    res.status(500).json({ message: error.message || 'Server error fetching requests' });
   }
 };
 
-// @desc    Get Department Overview
-// @route   GET /api/admin/department-summary
-// @access  Private (College Admin)
 const getDepartmentSummary = async (req, res) => {
   try {
-    const admin = await User.findById(req.user.id);
-    const collegeName = admin.college;
+    const { college, collegeId, collegeName } = await resolveCollegeContext(req.user.id);
+    const scope = createCollegeScope(collegeId, collegeName);
 
-    // 1. Get defined departments from College model
-    // 1. Get defined departments from College model using ID for reliability
-    const college = await College.findById(admin.collegeId);
-    const definedDepartments = college ? (college.departments || []) : [];
-
-    // 2. Aggregation to get students count per department
-    const deptStats = await User.aggregate([
-      { 
-        $match: { 
-          college: collegeName, 
-          status: 'APPROVED',
-          role: { $in: ['teacher', 'student'] }
-        } 
-      },
-      {
-        $group: {
-          _id: "$department",
-          teachers: { 
-            $sum: { $cond: [{ $eq: ["$role", "teacher"] }, 1, 0] } 
-          },
-          students: { 
-            $sum: { $cond: [{ $eq: ["$role", "student"] }, 1, 0] } 
+    const [userStats, sessionStats, attendanceStats] = await Promise.all([
+      User.aggregate([
+        {
+          $match: {
+            ...scope,
+            status: 'APPROVED',
+            role: { $in: ['teacher', 'student'] }
+          }
+        },
+        {
+          $group: {
+            _id: '$department',
+            teachers: { $sum: { $cond: [{ $eq: ['$role', 'teacher'] }, 1, 0] } },
+            students: { $sum: { $cond: [{ $eq: ['$role', 'student'] }, 1, 0] } }
           }
         }
-      }
+      ]),
+      AttendanceSession.aggregate([
+        { $match: { collegeId } },
+        { $group: { _id: '$department', sessionCount: { $sum: 1 } } }
+      ]),
+      Attendance.aggregate([
+        { $match: { collegeId, status: 'PRESENT' } },
+        { $group: { _id: '$department', presentCount: { $sum: 1 } } }
+      ])
     ]);
 
-    // 3. Merge defined departments with stats
-    // Create a map for easy lookup
-    const statsMap = deptStats.reduce((acc, curr) => {
-      if (curr._id) acc[curr._id] = curr;
-      return acc;
-    }, {});
+    const canonicalDepartment = (value) => {
+      const normalizedValue = normalizeDepartmentName(value);
+      if (!normalizedValue) {
+        return '';
+      }
 
-    // Combine unique departments (both defined and those found in users - legacy support)
-    const allDeptNames = [...new Set([...definedDepartments, ...deptStats.map(d => d._id).filter(Boolean)])];
-    
-    // Sort alphabetically
-    allDeptNames.sort();
+      if (!college.departments?.length) {
+        return normalizedValue;
+      }
 
-    const summary = allDeptNames.map(deptName => {
-      const stats = statsMap[deptName] || { teachers: 0, students: 0 };
-      return {
-        name: deptName,
-        teachers: stats.teachers,
-        students: stats.students,
-        avgAttendance: Math.floor(Math.random() * (95 - 70 + 1)) + 70 // Mock
-      };
-    });
+      return resolveDepartmentValue(normalizedValue, college.departments);
+    };
+
+    const summaryMap = new Map();
+    const ensureSummaryRow = (departmentName) => {
+      if (!departmentName) {
+        return null;
+      }
+
+      if (!summaryMap.has(departmentName)) {
+        summaryMap.set(departmentName, {
+          name: departmentName,
+          teachers: 0,
+          students: 0,
+          sessionCount: 0,
+          presentCount: 0
+        });
+      }
+
+      return summaryMap.get(departmentName);
+    };
+
+    for (const department of college.departments || []) {
+      ensureSummaryRow(canonicalDepartment(department));
+    }
+
+    for (const entry of userStats) {
+      const departmentName = canonicalDepartment(entry._id);
+      const row = ensureSummaryRow(departmentName);
+      if (!row) {
+        continue;
+      }
+
+      row.teachers += entry.teachers || 0;
+      row.students += entry.students || 0;
+    }
+
+    for (const entry of sessionStats) {
+      const departmentName = canonicalDepartment(entry._id);
+      const row = ensureSummaryRow(departmentName);
+      if (!row) {
+        continue;
+      }
+
+      row.sessionCount += entry.sessionCount || 0;
+    }
+
+    for (const entry of attendanceStats) {
+      const departmentName = canonicalDepartment(entry._id);
+      const row = ensureSummaryRow(departmentName);
+      if (!row) {
+        continue;
+      }
+
+      row.presentCount += entry.presentCount || 0;
+    }
+
+    const summary = Array.from(summaryMap.values())
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .map((row) => ({
+        name: row.name,
+        teachers: row.teachers,
+        students: row.students,
+        avgAttendance:
+          row.students > 0 && row.sessionCount > 0
+            ? Math.round((row.presentCount / (row.students * row.sessionCount)) * 100)
+            : 0
+      }));
 
     res.json(summary);
-
   } catch (error) {
     console.error('Dept Summary Error:', error);
-    res.status(500).json({ message: 'Server error fetching department summary' });
+    res.status(500).json({ message: error.message || 'Server error fetching department summary' });
   }
 };
 
-// @desc    Get Recent Activity (Mock)
-// @route   GET /api/admin/recent-activity
-// @access  Private (College Admin)
 const getRecentActivity = async (req, res) => {
-    // Mock Data - In real app, this would query an ActivityLog model
+  try {
+    const { collegeId, collegeName } = await resolveCollegeContext(req.user.id);
+    const scope = createCollegeScope(collegeId, collegeName);
+
+    const [recentUsers, recentSessions, recentCourses] = await Promise.all([
+      User.find({
+        ...scope,
+        role: { $in: ['teacher', 'student'] }
+      })
+        .select('name role status createdAt updatedAt')
+        .sort({ updatedAt: -1 })
+        .limit(5),
+      AttendanceSession.find({ collegeId })
+        .populate('teacher', 'name')
+        .select('course department teacher createdAt')
+        .sort({ createdAt: -1 })
+        .limit(5),
+      ClassModel.find({ collegeId })
+        .select('name department createdAt')
+        .sort({ createdAt: -1 })
+        .limit(5)
+    ]);
+
     const activities = [
-        { id: 1, text: "Teacher 'Rahul' approved", time: "2 mins ago", type: "success" },
-        { id: 2, text: "QR session created for CE-SEM 4", time: "15 mins ago", type: "info" },
-        { id: 3, text: "15 students marked present (10:00 AM)", time: "1 hour ago", type: "neutral" },
-        { id: 4, text: "New student registration request", time: "2 hours ago", type: "warning" }
-    ];
-    
+      ...recentUsers.map((user) => ({
+        id: `user-${user._id}`,
+        text:
+          user.status === 'PENDING'
+            ? `New ${user.role} request from ${user.name}`
+            : `${user.role === 'teacher' ? 'Teacher' : 'Student'} ${user.name} updated`,
+        time: formatTimestamp(user.updatedAt || user.createdAt),
+        date: user.updatedAt || user.createdAt,
+        type: user.status === 'PENDING' ? 'warning' : 'success'
+      })),
+      ...recentSessions.map((session) => ({
+        id: `session-${session._id}`,
+        text: `${session.teacher?.name || 'Teacher'} started attendance for ${session.course}`,
+        time: formatTimestamp(session.createdAt),
+        date: session.createdAt,
+        type: 'info'
+      })),
+      ...recentCourses.map((course) => ({
+        id: `course-${course._id}`,
+        text: `Course ${course.name} added to ${course.department}`,
+        time: formatTimestamp(course.createdAt),
+        date: course.createdAt,
+        type: 'neutral'
+      }))
+    ]
+      .sort((left, right) => new Date(right.date) - new Date(left.date))
+      .slice(0, 8);
+
     res.json(activities);
+  } catch (error) {
+    console.error('Recent Activity Error:', error);
+    res.status(500).json({ message: error.message || 'Server error fetching recent activity' });
+  }
 };
 
 module.exports = {

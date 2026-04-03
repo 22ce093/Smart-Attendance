@@ -904,3 +904,486 @@
     color: var(--color-text-secondary);
     max-width: 300px;
 }
+
+.route-loading,
+.loading-msg,
+.error-msg,
+.success-msg {
+    padding: 16px 18px;
+    border-radius: 14px;
+}
+
+.route-loading,
+.loading-msg {
+    background: rgba(56, 189, 248, 0.12);
+    border: 1px solid rgba(56, 189, 248, 0.22);
+    color: #38bdf8;
+}
+
+.error-msg {
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.24);
+    color: #f87171;
+}
+
+.toolbar-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+}
+
+.tab-group {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.tab-btn {
+    min-width: 112px;
+    justify-content: center;
+}
+
+.table-search {
+    min-width: min(100%, 280px);
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--glass-border);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--color-text-primary);
+    outline: none;
+}
+
+.table-search::placeholder {
+    color: var(--color-text-secondary);
+}
+
+.inline-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 92px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.status-pill.success {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+}
+
+.status-pill.danger {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+.form-textarea {
+    min-height: 110px;
+    resize: vertical;
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--color-text-secondary);
+}
+
+.form-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.separator-line {
+    height: 1px;
+    background: var(--glass-border);
+    margin: 24px 0;
+}
+
+.activity-feed {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.activity-row {
+    padding: 14px 0;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.activity-row:last-child {
+    border-bottom: none;
+}
+
+.activity-row-text {
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin-bottom: 4px;
+}
+
+.activity-row-time {
+    color: var(--color-text-secondary);
+    font-size: 0.85rem;
+}
+
+.attendance-builder,
+.scan-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.9fr);
+    gap: 24px;
+    align-items: start;
+}
+
+.attendance-form-card,
+.scan-main-card,
+.scan-status-card,
+.attendance-side-card {
+    min-height: 100%;
+}
+
+.attendance-form-grid {
+    display: grid;
+    gap: 20px;
+}
+
+.form-row-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.location-panel,
+.session-callout,
+.success-banner,
+.error-banner,
+.success-msg {
+    border-radius: 16px;
+    padding: 16px 18px;
+}
+
+.location-panel {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: center;
+    border: 1px solid rgba(56, 189, 248, 0.22);
+    background: rgba(14, 165, 233, 0.08);
+}
+
+.location-label,
+.attendance-side-header,
+.scan-status-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.location-label {
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.location-copy,
+.location-meta,
+.muted-copy {
+    color: var(--color-text-secondary);
+    margin: 6px 0 0;
+}
+
+.action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 44px;
+}
+
+.session-generated {
+    display: grid;
+    gap: 20px;
+    text-align: center;
+}
+
+.qr-preview-card {
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(240, 249, 255, 0.94));
+    border-radius: 24px;
+    padding: 18px;
+    display: flex;
+    justify-content: center;
+    box-shadow: 0 20px 50px -24px rgba(14, 165, 233, 0.45);
+}
+
+.qr-preview-image {
+    width: min(100%, 320px);
+    height: auto;
+    border-radius: 16px;
+}
+
+.session-details-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.session-detail-pill {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 52px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--glass-border);
+    color: var(--color-text-primary);
+}
+
+.session-callout {
+    background: rgba(34, 197, 94, 0.12);
+    border: 1px solid rgba(34, 197, 94, 0.22);
+    color: #4ade80;
+}
+
+.session-instructions {
+    color: var(--color-text-secondary);
+    display: grid;
+    gap: 6px;
+}
+
+.session-instructions p {
+    margin: 0;
+}
+
+.session-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.attendance-side-header h2,
+.scan-status-header h2 {
+    font-size: 1.2rem;
+}
+
+.attendance-rules {
+    margin: 20px 0 0;
+    padding-left: 18px;
+    color: var(--color-text-secondary);
+    display: grid;
+    gap: 14px;
+}
+
+.scan-main-card,
+.scan-status-card {
+    display: grid;
+    gap: 20px;
+}
+
+.scanner-live {
+    max-width: none;
+}
+
+.scanner-video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.scan-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.verification-item {
+    display: grid;
+    grid-template-columns: 18px 1fr;
+    gap: 12px;
+    align-items: start;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.verification-item:last-of-type {
+    border-bottom: none;
+}
+
+.verification-item p {
+    margin: 4px 0 0;
+    color: var(--color-text-secondary);
+}
+
+.session-preview-panel {
+    display: grid;
+    gap: 10px;
+    padding: 18px;
+    border-radius: 18px;
+    border: 1px solid var(--glass-border);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.session-preview-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--color-text-primary);
+}
+
+.success-banner,
+.error-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.success-banner,
+.success-msg {
+    background: rgba(34, 197, 94, 0.12);
+    border: 1px solid rgba(34, 197, 94, 0.28);
+    color: #4ade80;
+}
+
+.error-banner {
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.28);
+    color: #f87171;
+}
+
+.compact-empty-state {
+    padding: 36px 16px;
+}
+
+.spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (max-width: 1024px) {
+    .attendance-builder,
+    .scan-layout,
+    .dashboard-grid-2col {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .content-wrapper {
+        padding: 0 16px 24px;
+    }
+
+    .top-header {
+        height: auto;
+        min-height: 72px;
+        padding: 16px;
+    }
+
+    .page-header {
+        margin-bottom: 24px;
+    }
+
+    .page-title {
+        font-size: 1.65rem;
+    }
+
+    .request-card,
+    .schedule-item,
+    .pending-banner,
+    .location-panel {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .request-actions,
+    .session-actions,
+    .scan-actions {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+
+    .request-actions button,
+    .session-actions button,
+    .scan-actions button {
+        width: 100%;
+    }
+
+    .session-details-grid,
+    .form-row-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .table-responsive {
+        overflow-x: auto;
+    }
+
+    .data-table th,
+    .data-table td {
+        padding: 12px;
+        white-space: nowrap;
+    }
+}
+
+@media (max-width: 640px) {
+    .sidebar {
+        width: min(86vw, 320px);
+    }
+
+    .content-card,
+    .stat-card,
+    .request-card,
+    .schedule-item {
+        border-radius: 16px;
+    }
+
+    .stats-grid {
+        gap: 16px;
+    }
+
+    .stat-value {
+        font-size: 1.8rem;
+    }
+
+    .scanner-container {
+        border-radius: 18px;
+    }
+
+    .scanner-overlay {
+        top: 14px;
+        left: 14px;
+        right: 14px;
+        bottom: 14px;
+    }
+
+    .session-preview-panel,
+    .location-panel,
+    .session-callout,
+    .success-banner,
+    .error-banner {
+        padding: 14px;
+    }
+}

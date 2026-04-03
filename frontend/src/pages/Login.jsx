@@ -1,9 +1,18 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import './auth.css'
+import { clearStoredAuth, getHomeRouteForRole } from '../auth'
+
+const ROLE_PREFIX = {
+  superadmin: '/superadmin',
+  college_admin: '/admin',
+  teacher: '/teacher',
+  student: '/student'
+}
 
 export default function Login() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -27,29 +36,24 @@ export default function Login() {
         throw new Error(data.message || 'Login failed')
       }
       if (data.token) {
+        clearStoredAuth()
         localStorage.setItem('token', data.token)
         localStorage.setItem('role', data.role)
         localStorage.setItem('name', data.name)
+        localStorage.setItem('userId', data._id)
         if (data.college) localStorage.setItem('college', data.college)
+        if (data.department) localStorage.setItem('department', data.department)
       }
 
-      // Role-based redirect
-      switch (data.role) {
-        case 'superadmin':
-          navigate('/superadmin/dashboard')
-          break
-        case 'college_admin':
-          navigate('/admin/dashboard')
-          break
-        case 'teacher':
-          navigate('/teacher/dashboard')
-          break
-        case 'student':
-          navigate('/student/dashboard')
-          break
-        default:
-          navigate('/')
-      }
+      const requestedRoute = location.state?.from?.pathname
+      const defaultRoute = getHomeRouteForRole(data.role)
+      const allowedPrefix = ROLE_PREFIX[data.role]
+      const targetRoute =
+        requestedRoute && requestedRoute.startsWith(allowedPrefix)
+          ? requestedRoute
+          : defaultRoute
+
+      navigate(targetRoute, { replace: true })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -87,7 +91,7 @@ export default function Login() {
               type="password"
               value={form.password}
               onChange={onChange}
-              placeholder="••••••••"
+              placeholder="********"
               required
             />
           </div>

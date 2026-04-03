@@ -116,7 +116,7 @@ export default function ManageColleges() {
                                 <th>College Name</th>
                                 <th>Code</th>
                                 <th>Status</th>
-                                <th>Admin</th>
+                                <th>Contact Person</th>
                                 <th>Created Date</th>
                                 <th>Actions</th>
                             </tr>
@@ -142,7 +142,7 @@ export default function ManageColleges() {
                                         {college.collegeAdmin ? (
                                             <div className="admin-info">
                                                 <div className="admin-name">{college.collegeAdmin.name}</div>
-                                                <div className="admin-email">{college.collegeAdmin.email}</div>
+                                                <div className="admin-phone">{college.collegeAdmin.phone || <span className="text-muted">No Mobile</span>}</div>
                                             </div>
                                         ) : <span className="text-muted">No Admin</span>}
                                     </td>

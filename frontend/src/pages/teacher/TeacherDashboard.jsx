@@ -1,201 +1,178 @@
-import { useState, useEffect } from 'react'
-import DashboardLayout from '../../components/DashboardLayout'
-import { StatCard, RequestCard, SectionHeader } from '../../components/DashboardWidgets'
-import { BookOpen, QrCode, UserCheck, BarChart3, AlertTriangle } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react';
+import DashboardLayout from '../../components/DashboardLayout';
+import { RequestCard, SectionHeader, StatCard } from '../../components/DashboardWidgets';
+import { AlertTriangle, BarChart3, BookOpen, QrCode, UserCheck } from 'lucide-react';
 
 export default function TeacherDashboard() {
-    const [pendingStudents, setPendingStudents] = useState([])
-    const [loading, setLoading] = useState(true)
-    const [actionLoading, setActionLoading] = useState(false)
-    const [error, setError] = useState(null)
+  const [pendingStudents, setPendingStudents] = useState([]);
+  const [recentSessions, setRecentSessions] = useState([]);
+  const [lowAttendanceStudents, setLowAttendanceStudents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState('');
+  const [error, setError] = useState('');
+  const [stats, setStats] = useState({
+    pendingApprovals: 0,
+    todaysClasses: 0,
+    activeSession: 'None',
+    avgAttendance: '0%'
+  });
 
-    const token = localStorage.getItem('token')
-    const userName = localStorage.getItem('name') || 'Teacher'
+  const token = localStorage.getItem('token');
+  const userName = localStorage.getItem('name') || 'Teacher';
 
-    const [stats, setStats] = useState({
-        pendingApprovals: 0,
-        todaysClasses: 0,
-        activeSession: 'None',
-        avgAttendance: '0%'
-    });
+  const loadDashboard = useCallback(async () => {
+    setLoading(true);
+    setError('');
 
-    useEffect(() => {
-        fetchDashboardStats();
-        fetchPendingStudents();
-    }, [])
+    try {
+      const headers = { Authorization: `Bearer ${token}` };
+      const [statsRes, pendingRes, historyRes, lowAttendanceRes] = await Promise.all([
+        fetch('/api/teacher/dashboard-stats', { headers }),
+        fetch('/api/teacher/pending', { headers }),
+        fetch('/api/teacher/attendance/history', { headers }),
+        fetch('/api/teacher/students/low-attendance', { headers })
+      ]);
 
-    const fetchDashboardStats = async () => {
-        try {
-            const res = await fetch('http://localhost:5000/api/teacher/dashboard-stats', {
-                headers: { Authorization: `Bearer ${token}` }
-            })
-            const data = await res.json()
-            if (res.ok) setStats(data)
-        } catch (err) {
-            console.error("Failed to fetch stats", err)
-        }
+      const [statsData, pendingData, historyData, lowAttendanceData] = await Promise.all([
+        statsRes.json(),
+        pendingRes.json(),
+        historyRes.json(),
+        lowAttendanceRes.json()
+      ]);
+
+      if (!statsRes.ok) throw new Error(statsData.message || 'Failed to load stats');
+      if (!pendingRes.ok) throw new Error(pendingData.message || 'Failed to load pending students');
+      if (!historyRes.ok) throw new Error(historyData.message || 'Failed to load attendance history');
+      if (!lowAttendanceRes.ok) throw new Error(lowAttendanceData.message || 'Failed to load low attendance data');
+
+      setStats(statsData);
+      setPendingStudents(pendingData);
+      setRecentSessions(historyData.slice(0, 4));
+      setLowAttendanceStudents(lowAttendanceData.slice(0, 4));
+    } catch (requestError) {
+      console.error(requestError);
+      setError(requestError.message || 'Failed to load dashboard');
+    } finally {
+      setLoading(false);
     }
+  }, [token]);
 
-    const fetchPendingStudents = async () => {
-        try {
-            const res = await fetch('http://localhost:5000/api/teacher/pending', {
-                headers: { Authorization: `Bearer ${token}` }
-            })
-            const data = await res.json()
-            if (!res.ok) throw new Error(data.message)
-            setPendingStudents(data)
-        } catch (err) {
-            console.error(err) // Supress visible error for pending students if stats load ok
-        } finally {
-            setLoading(false)
-        }
+  useEffect(() => {
+    loadDashboard();
+  }, [loadDashboard]);
+
+  const handleAction = async (studentId, action) => {
+    setActionLoading(studentId);
+    setError('');
+
+    try {
+      const response = await fetch(`/api/teacher/${action}/${studentId}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || `Failed to ${action} student`);
+
+      setPendingStudents((current) => current.filter((student) => student._id !== studentId));
+      await loadDashboard();
+    } catch (requestError) {
+      console.error(requestError);
+      setError(requestError.message || `Failed to ${action} student`);
+    } finally {
+      setActionLoading('');
     }
+  };
 
-    const handleApprove = async (id) => {
-        setActionLoading(true)
-        try {
-            const res = await fetch(`/api/teacher/approve/${id}`, {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${token}` }
-            })
-            if (!res.ok) throw new Error('Failed to approve')
-            setPendingStudents(prev => prev.filter(s => s._id !== id))
-        } catch (err) {
-            setError(err.message)
-        } finally {
-            setActionLoading(false)
-        }
-    }
+  return (
+    <DashboardLayout role="teacher" userName={userName}>
+      <div className="page-header">
+        <h1 className="page-title">Teacher Dashboard</h1>
+        <div className="page-subtitle">Monitor attendance activity, pending requests, and student risk alerts.</div>
+      </div>
 
-    const handleReject = async (id) => {
-        setActionLoading(true)
-        try {
-            const res = await fetch(`/api/teacher/reject/${id}`, {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${token}` }
-            })
-            if (!res.ok) throw new Error('Failed to reject')
-            setPendingStudents(prev => prev.filter(s => s._id !== id))
-        } catch (err) {
-            setError(err.message)
-        } finally {
-            setActionLoading(false)
-        }
-    }
+      {error ? <div className="error-msg">{error}</div> : null}
 
-    return (
-        <DashboardLayout role="teacher" userName={userName}>
-            <div className="page-header">
-                <h1 className="page-title">Teacher Dashboard</h1>
-                <div className="page-subtitle">Manage your classes and students</div>
+      <div className="stats-grid">
+        <StatCard label="Today's Classes" value={stats.todaysClasses} icon={<BookOpen size={24} />} color="blue" />
+        <StatCard label="Active QR Session" value={stats.activeSession} icon={<QrCode size={24} />} color="purple" />
+        <StatCard label="Pending Approvals" value={stats.pendingApprovals} icon={<UserCheck size={24} />} color="orange" />
+        <StatCard label="Avg Attendance" value={stats.avgAttendance} icon={<BarChart3 size={24} />} color="green" />
+      </div>
+
+      <div className="attendance-builder">
+        <div className="content-card">
+          <SectionHeader title="Pending Student Approvals" />
+
+          {loading ? <div className="loading-msg">Loading requests...</div> : null}
+
+          {!loading && pendingStudents.length === 0 ? (
+            <div className="empty-state compact-empty-state">
+              <p>No pending student requests</p>
             </div>
-
-            <div className="stats-grid">
-                <StatCard
-                    label="Today's Classes"
-                    value={stats.todaysClasses}
-                    icon={<BookOpen size={24} />}
-                    color="blue"
+          ) : (
+            <div className="requests-list">
+              {pendingStudents.map((student) => (
+                <RequestCard
+                  key={student._id}
+                  user={student}
+                  onApprove={() => handleAction(student._id, 'approve')}
+                  onReject={() => handleAction(student._id, 'reject')}
+                  loading={actionLoading === student._id}
                 />
-                <StatCard
-                    label="Active QR Session"
-                    value={stats.activeSession}
-                    icon={<QrCode size={24} />}
-                    color="purple"
-                />
-                <StatCard
-                    label="Pending Approvals"
-                    value={stats.pendingApprovals}
-                    icon={<UserCheck size={24} />}
-                    color="orange"
-                />
-                <StatCard
-                    label="Avg Attendance"
-                    value={stats.avgAttendance}
-                    icon={<BarChart3 size={24} />}
-                    color="green"
-                />
+              ))}
             </div>
+          )}
+        </div>
 
-            <div className="dashboard-grid-2col" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
-                {/* Left Column */}
-                <div className="main-section">
-                    <SectionHeader title="Pending Student Approvals" />
-
-                    {loading && <div className="loading-msg">Loading requests...</div>}
-                    {error && <div className="error-msg">{error}</div>}
-
-                    {!loading && pendingStudents.length === 0 && (
-                        <div className="empty-state">
-                            <div className="empty-icon">✅</div>
-                            <p>No pending student requests</p>
-                        </div>
-                    )}
-
-                    <div className="requests-list">
-                        {pendingStudents.map(student => (
-                            <RequestCard
-                                key={student._id}
-                                user={student}
-                                onApprove={handleApprove}
-                                onReject={handleReject}
-                                loading={actionLoading}
-                            />
-                        ))}
+        <div className="scan-status-card">
+          <div className="content-card">
+            <SectionHeader title="Recent Attendance Sessions" />
+            {recentSessions.length === 0 ? (
+              <div className="empty-state compact-empty-state">
+                <p>No sessions recorded yet</p>
+              </div>
+            ) : (
+              <div className="schedule-list">
+                {recentSessions.map((session) => (
+                  <div className="schedule-item" key={session.id}>
+                    <div className="schedule-time">{session.date}</div>
+                    <div className="schedule-details">
+                      <div className="schedule-subject">{session.course}</div>
+                      <div className="schedule-room">
+                        {session.present} / {session.total} students present
+                      </div>
                     </div>
-                </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
-                {/* Right Column */}
-                <div className="side-section">
-                    <SectionHeader title="Today's Classes" />
-                    <div className="schedule-list">
-                        <div className="schedule-item">
-                            <div className="schedule-time">10:00 AM</div>
-                            <div className="schedule-details">
-                                <div className="schedule-subject">Data Structures</div>
-                                <div className="schedule-room">34 Students</div>
-                            </div>
-                        </div>
-                        <div className="schedule-item">
-                            <div className="schedule-time">01:30 PM</div>
-                            <div className="schedule-details">
-                                <div className="schedule-subject">Database Mgmt</div>
-                                <div className="schedule-room">28 Students</div>
-                            </div>
-                        </div>
+          <div className="content-card">
+            <SectionHeader title="Low Attendance Alerts" />
+            {lowAttendanceStudents.length === 0 ? (
+              <div className="empty-state compact-empty-state">
+                <p>No students are currently below the threshold.</p>
+              </div>
+            ) : (
+              <div className="requests-list">
+                {lowAttendanceStudents.map((student) => (
+                  <div key={student._id} className="request-card">
+                    <div className="request-info">
+                      <div className="request-name">{student.name}</div>
+                      <div className="request-email">
+                        <AlertTriangle size={14} />
+                        <span>{student.attendancePct}% attendance</span>
+                      </div>
                     </div>
-
-                    <div style={{ marginTop: '32px' }}>
-                        <SectionHeader title="Low Attendance Alerts" />
-                        <div className="requests-list">
-                            <div className="request-card" style={{ padding: '16px' }}>
-                                <div className="request-info">
-                                    <div className="request-name" style={{ fontSize: '0.95rem' }}>Rahul Sharma</div>
-                                    <div className="request-email" style={{ fontSize: '0.8rem', color: '#ef4444' }}>
-                                        <AlertTriangle size={12} style={{ display: 'inline', marginRight: '4px' }} />
-                                        Below 75% (68%)
-                                    </div>
-                                </div>
-                                <button className="btn-approve" style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'rgba(14, 165, 233, 0.15)', color: '#0ea5e9', border: 'none' }}>
-                                    Message
-                                </button>
-                            </div>
-                            <div className="request-card" style={{ padding: '16px' }}>
-                                <div className="request-info">
-                                    <div className="request-name" style={{ fontSize: '0.95rem' }}>Priya Patel</div>
-                                    <div className="request-email" style={{ fontSize: '0.8rem', color: '#ef4444' }}>
-                                        <AlertTriangle size={12} style={{ display: 'inline', marginRight: '4px' }} />
-                                        Below 75% (72%)
-                                    </div>
-                                </div>
-                                <button className="btn-approve" style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'rgba(14, 165, 233, 0.15)', color: '#0ea5e9', border: 'none' }}>
-                                    Message
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </DashboardLayout>
-    )
+                    <div className="status-pill danger">{student.attendancePct}%</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </DashboardLayout>
+  );
 }

@@ -1,6 +1,8 @@
 const User = require('../models/User');
+const College = require('../models/College');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { equalDepartmentNames, normalizeDepartmentName, resolveDepartmentValue } = require('../utils/department');
 const {
   validateFullName,
   validateEmail,
@@ -17,12 +19,35 @@ const generateToken = (id, role) => {
   });
 };
 
+const escapeRegex = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const dedupeDepartments = (departments = []) => {
+  const uniqueDepartments = [];
+
+  for (const value of departments) {
+    const normalizedValue = normalizeDepartmentName(value);
+    if (!normalizedValue) {
+      continue;
+    }
+
+    if (!uniqueDepartments.some((item) => equalDepartmentNames(item, normalizedValue))) {
+      uniqueDepartments.push(normalizedValue);
+    }
+  }
+
+  return uniqueDepartments;
+};
+
 // @desc    Register a new user
 // @route   POST /api/auth/register
 // @access  Public
 const registerUser = async (req, res) => {
   try {
     const { name, email, password, role, phone, department, enrollmentId, teacherId, college } = req.body;
+    const normalizedDepartment = normalizeDepartmentName(department);
+    const normalizedEnrollmentId = enrollmentId ? String(enrollmentId).trim().toUpperCase() : '';
+    const normalizedTeacherId = teacherId ? String(teacherId).trim().toUpperCase() : '';
+    const normalizedCollegeName = String(college || '').trim();
 
     // Prevent superadmin registration
     if (role === 'superadmin') {
@@ -49,34 +74,72 @@ const registerUser = async (req, res) => {
 
     // Role-specific validation
     if (role === 'student') {
-      if (!enrollmentId) {
+      if (!normalizedEnrollmentId) {
         return res.status(400).json({ message: 'Enrollment ID is required for students' });
       }
-      if (!validateEnrollmentId(enrollmentId)) {
+      if (!validateEnrollmentId(normalizedEnrollmentId)) {
         return res.status(400).json({ message: 'Enrollment ID must be in format like 22CE093 (YY+Branch+Number)' });
       }
-      if (!department) {
+      if (!normalizedDepartment) {
         return res.status(400).json({ message: 'Department is required for students' });
       }
     }
 
     if (role === 'teacher') {
-      if (!teacherId) {
+      if (!normalizedTeacherId) {
         return res.status(400).json({ message: 'Teacher ID is required for teachers' });
       }
-      if (!validateTeacherId(teacherId)) {
+      if (!validateTeacherId(normalizedTeacherId)) {
         return res.status(400).json({ message: 'Teacher ID must be in format like CE001 (Branch+Number)' });
       }
-      if (!department) {
+      if (!normalizedDepartment) {
         return res.status(400).json({ message: 'Department is required for teachers' });
       }
     }
 
-    if (role === 'college_admin') {
-      if (!college) {
-        return res.status(400).json({ message: 'College is required for College Admin' });
+    if (!normalizedCollegeName) {
+      return res.status(400).json({ message: 'College is required' });
+    }
+
+    const collegeRecord = await College.findOne({
+      name: { $regex: `^${escapeRegex(normalizedCollegeName)}$`, $options: 'i' }
+    }).select('_id name status isActive departments');
+
+    if (!collegeRecord) {
+      return res.status(400).json({ message: 'Selected college is not available' });
+    }
+
+    if (collegeRecord.status !== 'APPROVED' || !collegeRecord.isActive) {
+      return res.status(403).json({ message: 'Selected college is currently not accepting registrations' });
+    }
+
+    const legacyDepartments = await User.distinct('department', {
+      collegeId: collegeRecord._id,
+      role: { $in: ['teacher', 'student'] },
+      department: { $exists: true, $ne: '' }
+    });
+    const allowedDepartments = dedupeDepartments([
+      ...(collegeRecord.departments || []),
+      ...legacyDepartments
+    ]);
+
+    let departmentValue;
+    if (role === 'student' || role === 'teacher') {
+      if (allowedDepartments.length) {
+        const departmentExists = allowedDepartments.some((value) =>
+          equalDepartmentNames(value, normalizedDepartment)
+        );
+
+        if (!departmentExists) {
+          return res
+            .status(400)
+            .json({ message: 'Department must match one of the selected college departments' });
+        }
+
+        departmentValue = resolveDepartmentValue(normalizedDepartment, allowedDepartments);
+      } else {
+        departmentValue = normalizedDepartment;
       }
-      // College admin does NOT require department
     }
 
     // Check if user exists
@@ -86,14 +149,14 @@ const registerUser = async (req, res) => {
     }
 
     // Check for duplicate enrollmentId or teacherId
-    if (enrollmentId) {
-      const enrollmentExists = await User.findOne({ enrollmentId });
+    if (normalizedEnrollmentId) {
+      const enrollmentExists = await User.findOne({ enrollmentId: normalizedEnrollmentId });
       if (enrollmentExists) {
         return res.status(400).json({ message: 'Enrollment ID already exists' });
       }
     }
-    if (teacherId) {
-      const teacherIdExists = await User.findOne({ teacherId });
+    if (normalizedTeacherId) {
+      const teacherIdExists = await User.findOne({ teacherId: normalizedTeacherId });
       if (teacherIdExists) {
         return res.status(400).json({ message: 'Teacher ID already exists' });
       }
@@ -113,10 +176,11 @@ const registerUser = async (req, res) => {
       password: hashedPassword,
       role,
       phone: phone || undefined,
-      department: department || undefined,
-      enrollmentId: enrollmentId || undefined,
-      teacherId: teacherId || undefined,
-      college: college || undefined,
+      department: departmentValue || undefined,
+      enrollmentId: normalizedEnrollmentId || undefined,
+      teacherId: normalizedTeacherId || undefined,
+      college: collegeRecord.name,
+      collegeId: collegeRecord._id,
       status
     });
 

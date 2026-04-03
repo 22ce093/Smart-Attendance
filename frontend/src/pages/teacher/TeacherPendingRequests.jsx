@@ -1,132 +1,94 @@
-import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import '../../pages/auth.css' // Reusing auth styles or create new ones? Better to use inline or a new css file if specific.
-// Using simple inline styles for now to ensure it works.
+import { useEffect, useState } from 'react';
+import DashboardLayout from '../../components/DashboardLayout';
+import { RequestCard, SectionHeader } from '../../components/DashboardWidgets';
 
 export default function TeacherPendingRequests() {
-    const [students, setStudents] = useState([])
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState(null)
-    const navigate = useNavigate()
+  const [students, setStudents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-    useEffect(() => {
-        fetchPendingStudents()
-    }, [])
+  const fetchPendingStudents = async () => {
+    setLoading(true);
+    setError('');
 
-    const fetchPendingStudents = async () => {
-        try {
-            const token = localStorage.getItem('token')
-            if (!token) {
-                navigate('/login')
-                return
-            }
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/teacher/pending', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await response.json();
 
-            const res = await fetch('/api/teacher/pending', {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            })
-            const data = await res.json()
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to load pending students');
+      }
 
-            if (!res.ok) {
-                throw new Error(data.message || 'Failed to fetch pending requests')
-            }
-
-            setStudents(data)
-        } catch (err) {
-            setError(err.message)
-        } finally {
-            setLoading(false)
-        }
+      setStudents(data);
+    } catch (requestError) {
+      console.error(requestError);
+      setError(requestError.message || 'Failed to load pending students');
+    } finally {
+      setLoading(false);
     }
+  };
 
-    const handleAction = async (id, action) => {
-        if (!window.confirm(`Are you sure you want to ${action} this student?`)) return
+  useEffect(() => {
+    fetchPendingStudents();
+  }, []);
 
-        try {
-            const token = localStorage.getItem('token')
-            const res = await fetch(`/api/teacher/${action}/${id}`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            })
+  const handleAction = async (studentId, action) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/teacher/${action}/${studentId}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await response.json();
 
-            const data = await res.json()
-            if (!res.ok) throw new Error(data.message || `Failed to ${action} student`)
+      if (!response.ok) {
+        throw new Error(data.message || `Failed to ${action} student`);
+      }
 
-            // Remove student from list locally
-            setStudents(students.filter(s => s._id !== id))
-            alert(`Student ${action}d successfully`)
-        } catch (err) {
-            alert(err.message)
-        }
+      setStudents((current) => current.filter((student) => student._id !== studentId));
+    } catch (requestError) {
+      console.error(requestError);
+      setError(requestError.message || `Failed to ${action} student`);
     }
+  };
 
-    if (loading) return <div style={{ padding: '20px', color: 'white' }}>Loading...</div>
-
-    return (
-        <div style={{ padding: '20px', color: 'var(--color-text-primary)' }}>
-            <h2>Pending Student Approvals</h2>
-            <button onClick={() => navigate('/')} style={{ marginBottom: '20px', padding: '8px 16px', cursor: 'pointer' }}>Back to Home</button>
-
-            {error && <div className="error-msg">{error}</div>}
-
-            {students.length === 0 ? (
-                <p>No pending requests.</p>
-            ) : (
-                <div style={{ display: 'grid', gap: '20px', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
-                    {students.map(student => (
-                        <div key={student._id} style={{
-                            background: 'var(--glass-bg)',
-                            padding: '20px',
-                            borderRadius: '12px',
-                            border: '1px solid var(--glass-border)',
-                            backdropFilter: 'blur(10px)'
-                        }}>
-                            <h3 style={{ margin: '0 0 10px 0' }}>{student.name}</h3>
-                            <p><strong>Email:</strong> {student.email}</p>
-                            <p><strong>Phone:</strong> {student.phone}</p>
-                            <p><strong>Dept:</strong> {student.department}</p>
-                            <p><strong>Enrollment ID:</strong> {student.enrollmentId}</p>
-                            <p><strong>College:</strong> {student.college}</p>
-                            <p><strong>Role:</strong> {student.role}</p>
-
-                            <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
-                                <button
-                                    onClick={() => handleAction(student._id, 'approve')}
-                                    style={{
-                                        flex: 1,
-                                        padding: '10px',
-                                        backgroundColor: '#4CAF50',
-                                        color: 'white',
-                                        border: 'none',
-                                        borderRadius: '6px',
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    Approve
-                                </button>
-                                <button
-                                    onClick={() => handleAction(student._id, 'reject')}
-                                    style={{
-                                        flex: 1,
-                                        padding: '10px',
-                                        backgroundColor: '#f44336',
-                                        color: 'white',
-                                        border: 'none',
-                                        borderRadius: '6px',
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    Reject
-                                </button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
+  return (
+    <DashboardLayout role="teacher" userName={localStorage.getItem('name')}>
+      <div className="page-header">
+        <h1 className="page-title">Pending Student Requests</h1>
+        <div className="page-subtitle">
+          Review new student registrations for your class and approve only genuine enrollments.
         </div>
-    )
+      </div>
+
+      <div className="content-card">
+        <SectionHeader title="Approval Queue" />
+
+        {error && <div className="error-msg">{error}</div>}
+        {loading ? <div className="loading-msg">Loading requests...</div> : null}
+
+        {!loading && students.length === 0 ? (
+          <div className="empty-state">
+            <h3>No pending requests</h3>
+            <p>All student approvals are up to date.</p>
+          </div>
+        ) : (
+          <div className="requests-list">
+            {students.map((student) => (
+              <RequestCard
+                key={student._id}
+                user={student}
+                onApprove={() => handleAction(student._id, 'approve')}
+                onReject={() => handleAction(student._id, 'reject')}
+                loading={loading}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </DashboardLayout>
+  );
 }

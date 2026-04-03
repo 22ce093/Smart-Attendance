@@ -16,6 +16,9 @@ const UserSchema = new mongoose.Schema({
     default: 'APPROVED' // Default APPROVED, logic handled in controller
   },
   assignedTeacher: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  attendanceDeviceHash: { type: String, select: false },
+  attendanceDeviceLabel: { type: String, select: false },
+  attendanceDeviceBoundAt: { type: Date, select: false },
   role: { 
     type: String, 
     enum: ['superadmin', 'college_admin', 'teacher', 'student'], 

@@ -1,24 +1,22 @@
-import { Link, useNavigate } from 'react-router-dom'
-import './auth.css'
-import { useState } from 'react'
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { GraduationCap, ShieldCheck, UserCog } from 'lucide-react';
+import './auth.css';
 
 const RoleCard = ({ id, title, subtitle, icon, selected, onClick }) => (
-  <button
-    className={`role-card ${selected ? 'selected' : ''}`}
-    onClick={() => onClick(id)}
-  >
+  <button className={`role-card ${selected ? 'selected' : ''}`} onClick={() => onClick(id)}>
     <div className="role-icon">{icon}</div>
     <div className="role-info">
       <div className="role-title">{title}</div>
       <div className="role-desc">{subtitle}</div>
     </div>
-    {selected && <div style={{ color: 'var(--color-accent)' }}>●</div>}
+    {selected ? <div style={{ color: 'var(--color-accent)', fontWeight: 700 }}>OK</div> : null}
   </button>
-)
+);
 
 export default function SelectRole() {
-  const navigate = useNavigate()
-  const [role, setRole] = useState('')
+  const navigate = useNavigate();
+  const [role, setRole] = useState('');
 
   return (
     <div className="auth-wrapper">
@@ -32,35 +30,31 @@ export default function SelectRole() {
           <RoleCard
             id="college_admin"
             title="College Admin"
-            subtitle="Manage your college & teachers"
-            icon="🛡️"
+            subtitle="Manage departments, users, and approvals"
+            icon={<UserCog size={26} />}
             selected={role === 'college_admin'}
             onClick={setRole}
           />
           <RoleCard
             id="teacher"
             title="Teacher"
-            subtitle="Manage classes & attendance"
-            icon="👨‍🏫"
+            subtitle="Run attendance sessions and manage students"
+            icon={<ShieldCheck size={26} />}
             selected={role === 'teacher'}
             onClick={setRole}
           />
           <RoleCard
             id="student"
             title="Student"
-            subtitle="Check-in & view history"
-            icon="🎓"
+            subtitle="Scan QR and view attendance records"
+            icon={<GraduationCap size={26} />}
             selected={role === 'student'}
             onClick={setRole}
           />
         </div>
 
         <div className="auth-actions">
-          <button
-            className="btn-primary"
-            disabled={!role}
-            onClick={() => navigate(`/register/${role}`)}
-          >
+          <button className="btn-primary" disabled={!role} onClick={() => navigate(`/register/${role}`)}>
             Continue
           </button>
 
@@ -70,6 +64,5 @@ export default function SelectRole() {
         </div>
       </div>
     </div>
-  )
+  );
 }
-

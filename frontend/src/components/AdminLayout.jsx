@@ -6,7 +6,7 @@ export default function AdminLayout() {
     const userName = localStorage.getItem('name') || 'College Admin'; // Or fetch from context
 
     return (
-        <DashboardLayout role="admin" userName={userName}>
+        <DashboardLayout role="college_admin" userName={userName}>
             <Outlet />
         </DashboardLayout>
     )

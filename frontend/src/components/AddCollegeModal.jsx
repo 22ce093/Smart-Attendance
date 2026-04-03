@@ -60,6 +60,9 @@ export default function AddCollegeModal({ onClose, onSuccess }) {
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || 'Failed to create college');
 
+            if (data.admin?.temporaryPassword) {
+                window.alert(`College created successfully. Temporary admin password: ${data.admin.temporaryPassword}`);
+            }
             onSuccess(data);
             onClose();
         } catch (err) {

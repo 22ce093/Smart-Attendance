@@ -1,154 +1,359 @@
-import { useState, useEffect } from 'react'
-import '../dashboard.css'
+import { useEffect, useMemo, useState } from 'react';
+import { SectionHeader } from '../../components/DashboardWidgets';
+
+const INITIAL_FORM = {
+  name: '',
+  email: '',
+  password: '',
+  role: 'student',
+  phone: '',
+  department: '',
+  enrollmentId: '',
+  teacherId: '',
+  status: 'APPROVED'
+};
 
 export default function AdminUsers() {
-    const [activeTab, setActiveTab] = useState('list')
-    const [users, setUsers] = useState([])
-    const [pendingTeachers, setPendingTeachers] = useState([])
-    const [loading, setLoading] = useState(false)
-    const [error, setError] = useState(null)
+  const [users, setUsers] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeRole, setActiveRole] = useState('student');
+  const [editingUserId, setEditingUserId] = useState('');
+  const [form, setForm] = useState(INITIAL_FORM);
 
-    // Form state for Create User
-    const [newUser, setNewUser] = useState({
-        name: '', email: '', password: '', role: 'student', phone: '', department: '', college: '', enrollmentId: ''
-    })
+  const loadPageData = async () => {
+    setLoading(true);
+    setError('');
 
-    useEffect(() => {
-        if (activeTab === 'list') fetchUsers()
-        if (activeTab === 'pending') fetchPendingTeachers()
-    }, [activeTab])
+    try {
+      const token = localStorage.getItem('token');
+      const headers = { Authorization: `Bearer ${token}` };
+      const [usersRes, departmentsRes] = await Promise.all([
+        fetch('/api/admin/users', { headers }),
+        fetch('/api/admin/colleges/departments', { headers })
+      ]);
 
-    const fetchUsers = async () => {
-        setLoading(true)
-        try {
-            const token = localStorage.getItem('token')
-            const res = await fetch('/api/admin/users', { headers: { 'Authorization': `Bearer ${token}` } })
-            const data = await res.json()
-            if (!res.ok) throw new Error(data.message)
-            setUsers(data)
-        } catch (err) { setError(err.message) } finally { setLoading(false) }
+      const [usersData, departmentsData] = await Promise.all([usersRes.json(), departmentsRes.json()]);
+
+      if (!usersRes.ok) throw new Error(usersData.message || 'Failed to load users');
+      if (!departmentsRes.ok) throw new Error(departmentsData.message || 'Failed to load departments');
+
+      setUsers(usersData);
+      setDepartments(departmentsData.departments || []);
+    } catch (requestError) {
+      console.error(requestError);
+      setError(requestError.message || 'Failed to load user management data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadPageData();
+  }, []);
+
+  const filteredUsers = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    return users.filter((user) => {
+      if (user.role !== activeRole) {
+        return false;
+      }
+
+      if (!normalizedSearch) {
+        return true;
+      }
+
+      return [user.name, user.email, user.enrollmentId, user.teacherId, user.department]
+        .filter(Boolean)
+        .some((value) => value.toLowerCase().includes(normalizedSearch));
+    });
+  }, [users, activeRole, searchTerm]);
+
+  const resetForm = () => {
+    setEditingUserId('');
+    setForm(INITIAL_FORM);
+  };
+
+  const startEdit = (user) => {
+    setEditingUserId(user._id);
+    setActiveRole(user.role);
+    setForm({
+      name: user.name || '',
+      email: user.email || '',
+      password: '',
+      role: user.role,
+      phone: user.phone || '',
+      department: user.department || '',
+      enrollmentId: user.enrollmentId || '',
+      teacherId: user.teacherId || '',
+      status: user.status || 'APPROVED'
+    });
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setError('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const isEditing = Boolean(editingUserId);
+      const endpoint = isEditing ? `/api/admin/users/${editingUserId}` : '/api/admin/create-user';
+      const method = isEditing ? 'PUT' : 'POST';
+      const payload = isEditing
+        ? {
+            name: form.name,
+            email: form.email,
+            phone: form.phone,
+            department: form.department,
+            status: form.status
+          }
+        : {
+            name: form.name,
+            email: form.email,
+            password: form.password,
+            role: form.role,
+            phone: form.phone,
+            department: form.department,
+            enrollmentId: form.role === 'student' ? form.enrollmentId : undefined,
+            teacherId: form.role === 'teacher' ? form.teacherId : undefined
+          };
+
+      const response = await fetch(endpoint, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to save user');
+
+      await loadPageData();
+      resetForm();
+    } catch (requestError) {
+      console.error(requestError);
+      setError(requestError.message || 'Failed to save user');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (userId) => {
+    if (!window.confirm('Delete this user permanently?')) {
+      return;
     }
 
-    const fetchPendingTeachers = async () => {
-        setLoading(true)
-        try {
-            const token = localStorage.getItem('token')
-            const res = await fetch('/api/admin/pending-teachers', { headers: { 'Authorization': `Bearer ${token}` } })
-            const data = await res.json()
-            if (!res.ok) throw new Error(data.message)
-            setPendingTeachers(data)
-        } catch (err) { setError(err.message) } finally { setLoading(false) }
-    }
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/admin/users/${userId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to delete user');
 
-    const handleCreateUser = async (e) => {
-        e.preventDefault()
-        try {
-            const token = localStorage.getItem('token')
-            const res = await fetch('/api/admin/create-user', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify(newUser)
-            })
-            const data = await res.json()
-            if (!res.ok) throw new Error(data.message)
-            alert('User created successfully')
-            setNewUser({ name: '', email: '', password: '', role: 'student', phone: '', department: '', college: '', enrollmentId: '' })
-        } catch (err) {
-            alert(err.message)
-        }
+      await loadPageData();
+      if (editingUserId === userId) {
+        resetForm();
+      }
+    } catch (requestError) {
+      console.error(requestError);
+      setError(requestError.message || 'Failed to delete user');
     }
+  };
 
-    const handleTeacherAction = async (id, action) => {
-        try {
-            const token = localStorage.getItem('token')
-            const res = await fetch(`/api/admin/${action}/${id}`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` }
-            })
-            if (!res.ok) throw new Error('Action failed')
-            setPendingTeachers(pendingTeachers.filter(t => t._id !== id))
-            alert(`Teacher ${action}d`)
-        } catch (err) { alert(err.message) }
-    }
+  return (
+    <div className="admin-page-container">
+      <div className="page-header">
+        <h1 className="page-title">College Users</h1>
+        <div className="page-subtitle">Create, edit, and remove teacher or student accounts for your college.</div>
+      </div>
 
-    return (
-        <div>
-            <div className="page-header">
-                <h1 className="page-title">User Management</h1>
-                <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
-                    <button onClick={() => setActiveTab('list')} className={activeTab === 'list' ? 'btn-primary' : 'btn-back'}>All Users</button>
-                    <button onClick={() => setActiveTab('create')} className={activeTab === 'create' ? 'btn-primary' : 'btn-back'}>Create User</button>
-                    <button onClick={() => setActiveTab('pending')} className={activeTab === 'pending' ? 'btn-primary' : 'btn-back'}>Pending Teachers</button>
-                </div>
+      <div className="attendance-builder">
+        <div className="content-card">
+          <SectionHeader title="User Directory" />
+
+          <div className="toolbar-row">
+            <div className="tab-group">
+              {['student', 'teacher'].map((role) => (
+                <button
+                  key={role}
+                  className={activeRole === role ? 'btn-primary tab-btn' : 'btn-secondary tab-btn'}
+                  style={{ marginTop: 0 }}
+                  onClick={() => setActiveRole(role)}
+                >
+                  {role}s
+                </button>
+              ))}
             </div>
 
-            <div style={{ background: 'var(--glass-bg)', padding: '20px', borderRadius: '12px', marginTop: '20px' }}>
-                {error && <div className="error-msg">{error}</div>}
-                {loading && <p>Loading...</p>}
+            <input
+              className="table-search"
+              placeholder="Search by name, email or ID"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+            />
+          </div>
 
-                {activeTab === 'list' && (
-                    <table style={{ width: '100%', borderCollapse: 'collapse', color: 'white' }}>
-                        <thead>
-                            <tr style={{ textAlign: 'left' }}>
-                                <th>Name</th><th>Email</th><th>Role</th><th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {users.map(u => (
-                                <tr key={u._id} style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                                    <td style={{ padding: '10px' }}>{u.name}</td>
-                                    <td>{u.email}</td>
-                                    <td>{u.role}</td>
-                                    <td>{u.status}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                )}
+          {error ? <div className="error-msg">{error}</div> : null}
+          {loading ? <div className="loading-msg">Loading users...</div> : null}
 
-                {activeTab === 'create' && (
-                    <form onSubmit={handleCreateUser} style={{ display: 'grid', gap: '15px', maxWidth: '500px' }}>
-                        <input className="form-input" placeholder="Name" value={newUser.name} onChange={e => setNewUser({ ...newUser, name: e.target.value })} required />
-                        <input className="form-input" placeholder="Email" value={newUser.email} onChange={e => setNewUser({ ...newUser, email: e.target.value })} required />
-                        <input className="form-input" placeholder="Password" type="password" value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} required />
-                        <select className="form-input" value={newUser.role} onChange={e => setNewUser({ ...newUser, role: e.target.value })}>
-                            <option value="student">Student</option>
-                            <option value="teacher">Teacher</option>
-                            <option value="admin">Admin</option>
-                        </select>
-                        <input className="form-input" placeholder="Phone" value={newUser.phone} onChange={e => setNewUser({ ...newUser, phone: e.target.value })} />
-                        <input className="form-input" placeholder="College" value={newUser.college} onChange={e => setNewUser({ ...newUser, college: e.target.value })} />
-                        <input className="form-input" placeholder="Department" value={newUser.department} onChange={e => setNewUser({ ...newUser, department: e.target.value })} />
-                        {newUser.role === 'student' && (
-                            <input className="form-input" placeholder="Enrollment ID" value={newUser.enrollmentId} onChange={e => setNewUser({ ...newUser, enrollmentId: e.target.value })} />
-                        )}
-                        <button type="submit" className="btn-primary">Create User</button>
-                    </form>
-                )}
-
-                {activeTab === 'pending' && (
-                    <div>
-                        {pendingTeachers.length === 0 ? <p>No pending teachers</p> : (
-                            <div style={{ display: 'grid', gap: '10px' }}>
-                                {pendingTeachers.map(t => (
-                                    <div key={t._id} style={{ border: '1px solid white', padding: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <div>
-                                            <strong>{t.name}</strong> ({t.email}) - {t.department} / {t.college}
-                                        </div>
-                                        <div>
-                                            <button onClick={() => handleTeacherAction(t._id, 'approve')} style={{ marginRight: '10px', background: 'green', color: 'white', border: 'none', padding: '5px 10px' }}>Approve</button>
-                                            <button onClick={() => handleTeacherAction(t._id, 'reject')} style={{ background: 'red', color: 'white', border: 'none', padding: '5px 10px' }}>Reject</button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                )}
+          {!loading ? (
+            <div className="table-responsive">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Department</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredUsers.length === 0 ? (
+                    <tr>
+                      <td colSpan="5" style={{ textAlign: 'center', padding: '32px' }}>
+                        No users found for this filter
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredUsers.map((user) => (
+                      <tr key={user._id}>
+                        <td>
+                          <div style={{ fontWeight: 600 }}>{user.name}</div>
+                          <div className="muted-copy">{user.enrollmentId || user.teacherId || user.role}</div>
+                        </td>
+                        <td>{user.email}</td>
+                        <td>{user.department || 'N/A'}</td>
+                        <td>
+                          <span className={`status-pill ${user.status === 'APPROVED' ? 'success' : 'danger'}`}>
+                            {user.status}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="inline-actions">
+                            <button className="btn-secondary action-btn" style={{ marginTop: 0 }} onClick={() => startEdit(user)}>
+                              Edit
+                            </button>
+                            <button className="btn-reject" onClick={() => handleDelete(user._id)}>
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
+          ) : null}
         </div>
-    )
+
+        <div className="content-card">
+          <SectionHeader title={editingUserId ? 'Edit User' : 'Create User'} />
+
+          <form className="attendance-form-grid" onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label className="form-label">Full Name</label>
+              <input className="form-input" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Email</label>
+              <input className="form-input" type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} required />
+            </div>
+
+            {!editingUserId ? (
+              <div className="form-group">
+                <label className="form-label">Password</label>
+                <input className="form-input" type="password" value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} required />
+              </div>
+            ) : null}
+
+            <div className="form-group">
+              <label className="form-label">Role</label>
+              <select
+                className="form-input"
+                value={form.role}
+                disabled={Boolean(editingUserId)}
+                onChange={(event) => setForm((current) => ({ ...current, role: event.target.value }))}
+              >
+                <option value="student">Student</option>
+                <option value="teacher">Teacher</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Department</label>
+              <select
+                className="form-input"
+                value={form.department}
+                onChange={(event) => setForm((current) => ({ ...current, department: event.target.value }))}
+                required
+              >
+                <option value="">Select department</option>
+                {departments.map((department) => (
+                  <option key={department} value={department}>
+                    {department}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Phone</label>
+              <input className="form-input" value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} />
+            </div>
+
+            {!editingUserId && form.role === 'student' ? (
+              <div className="form-group">
+                <label className="form-label">Enrollment ID</label>
+                <input className="form-input" value={form.enrollmentId} onChange={(event) => setForm((current) => ({ ...current, enrollmentId: event.target.value.toUpperCase() }))} required />
+              </div>
+            ) : null}
+
+            {!editingUserId && form.role === 'teacher' ? (
+              <div className="form-group">
+                <label className="form-label">Teacher ID</label>
+                <input className="form-input" value={form.teacherId} onChange={(event) => setForm((current) => ({ ...current, teacherId: event.target.value.toUpperCase() }))} required />
+              </div>
+            ) : null}
+
+            {editingUserId ? (
+              <div className="form-group">
+                <label className="form-label">Status</label>
+                <select
+                  className="form-input"
+                  value={form.status}
+                  onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}
+                >
+                  <option value="APPROVED">APPROVED</option>
+                  <option value="BLOCKED">BLOCKED</option>
+                  <option value="REJECTED">REJECTED</option>
+                </select>
+              </div>
+            ) : null}
+
+            <div className="form-actions">
+              {editingUserId ? (
+                <button type="button" className="btn-secondary action-btn" style={{ marginTop: 0 }} onClick={resetForm}>
+                  Cancel edit
+                </button>
+              ) : null}
+              <button type="submit" className="btn-primary" disabled={saving}>
+                {saving ? 'Saving...' : editingUserId ? 'Update user' : 'Create user'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
 }
