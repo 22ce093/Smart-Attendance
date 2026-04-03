@@ -9,22 +9,82 @@ const College = require('./models/College');
 
 dotenv.config();
 
+const isProduction = process.env.NODE_ENV === 'production';
+const parseBoolean = (value = '') => String(value).trim().toLowerCase() === 'true';
+const parseAllowedOrigins = (rawOrigins = '') =>
+  String(rawOrigins)
+    .split(',')
+    .map((origin) => origin.trim().replace(/\/$/, ''))
+    .filter(Boolean);
+
+const requiredEnvVars = ['MONGO_URI', 'JWT_SECRET'];
+const missingEnvVars = requiredEnvVars.filter((envVar) => !process.env[envVar]);
+
+if (missingEnvVars.length > 0) {
+  console.error(`Missing required environment variables: ${missingEnvVars.join(', ')}`);
+  process.exit(1);
+}
+
 const app = express();
-app.use(cors());
+app.disable('x-powered-by');
+
+const allowedOrigins = parseAllowedOrigins(
+  process.env.CORS_ORIGIN || process.env.APP_ORIGIN || ''
+);
+
+app.use(
+  cors({
+    origin: (requestOrigin, callback) => {
+      if (!requestOrigin) {
+        callback(null, true);
+        return;
+      }
+
+      if (!isProduction && allowedOrigins.length === 0) {
+        callback(null, true);
+        return;
+      }
+
+      if (allowedOrigins.includes(requestOrigin.replace(/\/$/, ''))) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error('CORS origin is not allowed'));
+    },
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+  })
+);
 app.use(express.json());
 
 // Seed Super Admin
 const seedSuperAdmin = async () => {
   try {
-    const superAdminEmail = 'pneel5684@gmail.com';
+    const shouldSeed = parseBoolean(process.env.SEED_SUPERADMIN);
+    if (!shouldSeed) {
+      return;
+    }
+
+    const superAdminEmail = String(process.env.SUPERADMIN_EMAIL || '').trim().toLowerCase();
+    const superAdminPassword = String(process.env.SUPERADMIN_PASSWORD || '');
+    const superAdminName = String(process.env.SUPERADMIN_NAME || 'Super Admin').trim();
+
+    if (!superAdminEmail || !superAdminPassword) {
+      console.warn(
+        'SEED_SUPERADMIN is true but SUPERADMIN_EMAIL or SUPERADMIN_PASSWORD is missing. Skipping seed.'
+      );
+      return;
+    }
+
     const existingAdmin = await User.findOne({ email: superAdminEmail });
     
     if (!existingAdmin) {
       const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash('Neel@7504', salt);
+      const hashedPassword = await bcrypt.hash(superAdminPassword, salt);
       
       await User.create({
-        name: 'Super Admin',
+        name: superAdminName,
         email: superAdminEmail,
         password: hashedPassword,
         role: 'superadmin',
@@ -45,29 +105,34 @@ connectDB().then(() => {
   seedSuperAdmin();
 });
 
-// Debug endpoint to inspect DB connection and collections
-app.get('/api/debug-db', async (req, res) => {
-  try {
-    const db = mongoose.connection.db;
-    if (!db) return res.status(500).json({ message: 'No DB connection available' });
+const exposeDebugDbEndpoint =
+  !isProduction || parseBoolean(process.env.ENABLE_DEBUG_ENDPOINTS);
 
-    const collections = await db.listCollections().toArray();
-    const results = {};
-    for (const col of collections) {
-      try {
-        const count = await db.collection(col.name).countDocuments();
-        results[col.name] = count;
-      } catch (err) {
-        results[col.name] = `error: ${err.message}`;
+if (exposeDebugDbEndpoint) {
+  // Debug endpoint to inspect DB connection and collections.
+  app.get('/api/debug-db', async (req, res) => {
+    try {
+      const db = mongoose.connection.db;
+      if (!db) return res.status(500).json({ message: 'No DB connection available' });
+
+      const collections = await db.listCollections().toArray();
+      const results = {};
+      for (const col of collections) {
+        try {
+          const count = await db.collection(col.name).countDocuments();
+          results[col.name] = count;
+        } catch (err) {
+          results[col.name] = `error: ${err.message}`;
+        }
       }
-    }
 
-    res.json({ database: mongoose.connection.name, collections: results });
-  } catch (error) {
-    console.error('Debug DB error:', error);
-    res.status(500).json({ message: error.message || 'Failed to inspect DB' });
-  }
-});
+      res.json({ database: mongoose.connection.name, collections: results });
+    } catch (error) {
+      console.error('Debug DB error:', error);
+      res.status(500).json({ message: error.message || 'Failed to inspect DB' });
+    }
+  });
+}
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', time: Date.now() }));
 
@@ -139,6 +204,16 @@ app.get('/api/colleges-public', async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, '127.0.0.1', () => console.log(`Server running on http://127.0.0.1:${PORT}`));
+app.use((error, req, res, next) => {
+  if (error?.message === 'CORS origin is not allowed') {
+    return res.status(403).json({ message: 'CORS origin is not allowed' });
+  }
+
+  return next(error);
+});
+
+const PORT = Number(process.env.PORT) || 5000;
+const HOST = process.env.HOST || '0.0.0.0';
+
+app.listen(PORT, HOST, () => console.log(`Server running on http://${HOST}:${PORT}`));
 

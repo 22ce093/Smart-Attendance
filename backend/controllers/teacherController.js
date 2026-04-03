@@ -315,8 +315,18 @@ const createAttendanceSession = async (req, res) => {
     });
 
     const sessionToken = createSessionToken(session);
-    const defaultOrigin = process.env.APP_ORIGIN || 'http://localhost:5173';
-    const origin = (req.headers.origin || defaultOrigin).replace(/\/$/, '');
+    const requestOrigin = String(req.headers.origin || '').trim();
+    const configuredOrigin = String(process.env.APP_ORIGIN || '').trim();
+    const defaultOrigin =
+      process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5173';
+    const origin = (requestOrigin || configuredOrigin || defaultOrigin).replace(/\/$/, '');
+
+    if (!origin) {
+      return res.status(500).json({
+        message: 'APP_ORIGIN is required to generate QR scan links in production'
+      });
+    }
+
     const scanUrl = `${origin}/student/scan?token=${encodeURIComponent(sessionToken)}`;
     const qrCodeDataUrl = await QRCode.toDataURL(scanUrl, {
       margin: 1,

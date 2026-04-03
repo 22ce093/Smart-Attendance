@@ -57,12 +57,12 @@ const createSessionToken = (session) =>
       sessionId: session._id.toString(),
       sessionCode: session.sessionCode
     },
-    process.env.JWT_SECRET || 'secret',
+    process.env.JWT_SECRET,
     { expiresIn: `${session.durationMinutes}m` }
   );
 
 const verifySessionToken = (sessionToken) => {
-  const payload = jwt.verify(sessionToken, process.env.JWT_SECRET || 'secret');
+  const payload = jwt.verify(sessionToken, process.env.JWT_SECRET);
 
   if (payload.purpose !== ATTENDANCE_QR_PURPOSE) {
     throw new Error('Invalid attendance QR token');
